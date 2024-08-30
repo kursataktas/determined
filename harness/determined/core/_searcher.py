@@ -86,7 +86,7 @@ class SearcherOperation:
         logger.debug(f"op.report_progress({length})")
         self._session.post(
             f"/api/v1/trials/{self._trial_id}/progress",
-            data=det.util.json_encode({"progress": length}),
+            data=det.util.json_encode(length),
         )
 
     def report_completed(self, searcher_metric: Any) -> None:

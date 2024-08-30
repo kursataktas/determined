@@ -290,7 +290,7 @@ class DetCallback(transformers.TrainerCallback):  # type: ignore
 EVAL = "eval_"
 TEST = "test_"
 TRAIN = "train_"
-DEFAULT = "uncategorized"
+DEFAULT = "train_uncategorized"
 
 
 def get_metric_type(d: Dict[str, Any]) -> str:
