@@ -452,6 +452,7 @@ func (j *job) podDeletedCallback(deleted *k8sV1.Pod) {
 			msg:         fmt.Sprintf("pod %s deleted", deleted.Name),
 		}
 	}
+	j.informTaskResourcesState()
 }
 
 func (j *job) newEventCallback(event *k8sV1.Event) {
