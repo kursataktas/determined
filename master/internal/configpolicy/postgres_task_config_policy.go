@@ -2,9 +2,11 @@ package configpolicy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/uptrace/bun"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -93,7 +95,7 @@ func GetNTSCConfigPolicies(ctx context.Context,
 func DeleteConfigPolicies(ctx context.Context,
 	scope *int, workloadType model.WorkloadType,
 ) error {
-	if workloadType == model.UnknownType {
+	if workloadType != model.ExperimentType && workloadType != model.NTSCType {
 		return status.Error(codes.InvalidArgument,
 			"invalid workload type for config policies: "+workloadType.String())
 	}
@@ -116,4 +118,87 @@ func DeleteConfigPolicies(ctx context.Context,
 			strings.ToLower(workloadType.String()), scope, err)
 	}
 	return nil
+}
+
+// SetExperimentConfigPolicies adds the experiment invariant config and constraints config policies to
+// the database.
+func SetExperimentConfigPolicies(ctx context.Context,
+	experimentTCP *model.ExperimentTaskConfigPolicies,
+) error {
+	return db.Bun().RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return SetExperimentConfigPoliciesTx(ctx, &tx, experimentTCP)
+	})
+}
+
+// SetExperimentConfigPoliciesTx adds the experiment invariant config and constraints config
+// policies to the database.
+func SetExperimentConfigPoliciesTx(ctx context.Context, tx *bun.Tx,
+	expTCPs *model.ExperimentTaskConfigPolicies,
+) error {
+	if expTCPs.WorkloadType != model.ExperimentType {
+		return status.Error(codes.InvalidArgument,
+			"invalid workload type for config policies: "+expTCPs.WorkloadType.String())
+	}
+
+	// Validate experiment invariant config and constraints.
+	expInvariantConfig, err := json.Marshal(expTCPs.InvariantConfig)
+	if err != nil {
+		return errors.Wrapf(err, "error marshaling experiment invariant config %v",
+			expInvariantConfig)
+	}
+
+	invariantConfig := string(expInvariantConfig)
+
+	q := `
+		INSERT INTO task_config_policies (workspace_id, workload_type, last_updated_by,
+			last_updated_time,  invariant_config, constraints) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (workspace_id, workload_type) WHERE workspace_id IS NOT NULL
+			DO UPDATE SET last_updated_by = ?, last_updated_time = ?, invariant_config = ?, 
+			constraints = ?
+		`
+	if expTCPs.WorkspaceID == nil {
+		q = `
+			INSERT INTO task_config_policies (workspace_id, workload_type, last_updated_by,
+				last_updated_time, invariant_config, constraints) VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT (workload_type) WHERE workspace_id IS NULL
+				DO UPDATE SET last_updated_by = ?, last_updated_time = ?, invariant_config = ?, 
+				constraints = ?
+			`
+	}
+	_, err = db.Bun().NewRaw(q, expTCPs.WorkspaceID, model.ExperimentType.String(),
+		expTCPs.LastUpdatedBy, expTCPs.LastUpdatedTime, invariantConfig, expTCPs.Constraints,
+		expTCPs.LastUpdatedBy, expTCPs.LastUpdatedTime, invariantConfig, expTCPs.Constraints).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("error setting experiment task config policies: %w", err)
+	}
+
+	return nil
+}
+
+// GetExperimentConfigPolicies retrieves the invariant experiment config and constraints for the
+// given scope (global or workspace-level).
+func GetExperimentConfigPolicies(ctx context.Context,
+	scope *int) (*model.ExperimentTaskConfigPolicies, error) {
+	var experimentTCP model.ExperimentTaskConfigPolicies
+
+	wkspQuery := wkspIDQuery
+	if scope == nil {
+		wkspQuery = wkspIDGlobalQuery
+	}
+
+	err := db.Bun().NewSelect().
+		Model(&experimentTCP).
+		Where(wkspQuery, scope).
+		Where("workload_type = ?", model.ExperimentType).
+		Scan(ctx)
+	if err != nil {
+		if scope == nil {
+			return nil, fmt.Errorf("error retrieving global experiment task config "+
+				"policies: %w", err)
+		}
+		return nil, fmt.Errorf("error retrieving experiment task config policies for "+
+			"workspace with ID %d: %w", scope, err)
+	}
+	return &experimentTCP, nil
 }
