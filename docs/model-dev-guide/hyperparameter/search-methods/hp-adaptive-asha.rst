@@ -168,8 +168,8 @@ enough ``max_trials``:
 
 -  The initial number of trials is ``max_trials``.
 
--  To ensure that ``x`` trials are run ``max_time``, set ``max_time`` high enough for the
-   brackets with their halving rate (the ``divisor``) to allow ``x`` trials to make it to the final
+-  To ensure that ``x`` trials are run ``max_time``, set ``max_time`` high enough for the brackets
+   with their halving rate (the ``divisor``) to allow ``x`` trials to make it to the final
    ``rungs``. This can be viewed by the command describe below.
 
 A configuration setting that meets set goals can be found by trial and error. The command
