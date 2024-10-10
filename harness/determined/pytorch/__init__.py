@@ -38,3 +38,4 @@ from determined.pytorch._pytorch_trial import (
 )
 from determined.pytorch._load import CheckpointLoadContext, load_trial_from_checkpoint_path
 from determined.pytorch._trainer import init, Trainer
+from determined.pytoch._util import Batch, Epoch, TrainBoundary, TrainBoundaryType, TrainUnit, TrialState
