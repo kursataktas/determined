@@ -602,7 +602,7 @@ class _PyTorchTrialController:
         return train_boundaries, training_metrics
 
     def _train_for_op(
-        self, op: core.SearcherOperation, train_boundaries: List[_TrainBoundary]
+        self, op: core.SearcherOperation, train_boundaries: List[pytorch.TrainBoundary]
     ) -> None:
         if self.test_mode:
             train_length = pytorch.Batch(1)

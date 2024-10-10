@@ -38,7 +38,7 @@ class DeepSpeedTrialController(det.TrialController):
     def __init__(
         self,
         trial_inst: det.LegacyTrial,
-        context: pytorch.DeepSpeedTrialContext,
+        context: det_ds.DeepSpeedTrialContext,
         checkpoint_period: pytorch.TrainUnit,
         validation_period: pytorch.TrainUnit,
         reporting_period: pytorch.TrainUnit,
