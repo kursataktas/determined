@@ -93,7 +93,7 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         self._hparams = hparams
         self._num_gpus = num_gpus
         self._debug_enabled = debug_enabled
-        self._experiment_config = exp_conf
+        self._exp_conf = exp_conf
 
         self._trial_seed = trial_seed
 
@@ -143,7 +143,7 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         Check if the user specified options in optimizations are incompatible with
         DeepSpeedTrial.
         """
-        optimizations_config = self.experiment_config.get_optimizations_config()
+        optimizations_config = self._exp_conf.get_optimizations_config()
         self._average_training_metrics = optimizations_config.get("average_training_metrics", False)
 
         mixed_precision_val = optimizations_config.get("mixed_precision", "O0")
