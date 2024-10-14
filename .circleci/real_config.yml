@@ -4832,6 +4832,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           mark: e2e_cpu_rbac
           devcluster-config: single-rbac.devcluster.yaml
@@ -4843,6 +4844,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 6
           resource-class: xlarge
           tf2: true
@@ -4855,6 +4857,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 5
           resource-class: large
           tf2: true
@@ -4869,6 +4872,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           devcluster-config: oauth.devcluster.yaml
           mark: test_oauth
@@ -4881,6 +4885,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           devcluster-config: rbac-model-registry.yaml
           mark: test_model_registry_rbac
@@ -4893,6 +4898,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 4
           resource-class: large
           tf2: true
@@ -4910,6 +4916,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 4
           resource-class: large
           tf2: true
@@ -4925,6 +4932,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           tf2: true
           mark: e2e_multi_k8s
@@ -4940,6 +4948,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           mark: e2e_single_k8s
           target-stage: master
@@ -4953,6 +4962,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           devcluster-config: port-registry.devcluster.yaml
           mark: port_registry
@@ -4965,6 +4975,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           resource-class: large
           mark: e2e_cpu_elastic
@@ -4978,6 +4989,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           mark: e2e_cpu_postgres
           devcluster-config: postgres-with-ssl.devcluster.yaml
@@ -4991,6 +5003,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           mark: e2e_cpu_postgres
           devcluster-config: postgres-with-ssl.devcluster.yaml
@@ -5004,6 +5017,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           mark: e2e_cpu_postgres
           devcluster-config: custom-agent-version.devcluster.yaml
@@ -5017,6 +5031,7 @@ workflows:
           name: test-e2e-agent-connection-loss
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           mark: e2e_cpu_agent_connection_loss
           devcluster-config: agent-no-connection.devcluster.yaml
@@ -5033,6 +5048,7 @@ workflows:
             - dev-ci-cluster-default-user-credentials
           requires:
             - build-go-ee
+            - pull-main-docker-images
           parallelism: 1
           devcluster-config: saml.devcluster.yaml
           mark: e2e_saml
