@@ -1,5 +1,6 @@
 import json
 import logging
+import pathlib
 import time
 from importlib import util as importutil
 from typing import Any, Dict, List, Optional, Set, Type, Union, cast
@@ -389,6 +390,12 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
             *args,
             **kwargs,
         )
+
+    def get_tensorboard_path(self) -> pathlib.Path:
+        """
+        Get the path where files for consumption by TensorBoard should be written
+        """
+        return self._core.train.get_tensorboard_path()
 
     def get_tensorboard_writer(self) -> Any:
         """
