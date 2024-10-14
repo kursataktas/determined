@@ -93,7 +93,7 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         self._hparams = hparams
         self._num_gpus = num_gpus
         self._debug_enabled = debug_enabled
-        self._exp_conf = exp_conf
+        self._experiment_config = exp_conf
 
         self._trial_seed = trial_seed
 
