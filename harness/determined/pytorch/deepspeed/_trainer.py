@@ -238,7 +238,7 @@ def init(
     distributed: Optional[core.DistributedContext] = None,
     aggregation_frequency: int = 1,
     enable_tensorboard_logging: bool = True,
-) -> Iterator[pytorch.PyTorchTrialContext]:
+) -> Iterator[det_ds.DeepSpeedTrialContext]:
     """
     Creates a PyTorchTrialContext for use with a PyTorchTrial. All trainer.* calls must be within
     the scope of this context because there are resources started in __enter__ that must be
@@ -286,16 +286,13 @@ def init(
         preempt_mode=core.PreemptMode.WorkersAskChief,
         tensorboard_mode=core.TensorboardMode.MANUAL,
     ) as core_context:
-        context = pytorch.PyTorchTrialContext(
+        context = det_ds.DeepSpeedTrialContext(
             core_context=core_context,
             trial_seed=trial_seed,
             hparams=hparams,
             slots_per_trial=core_context.distributed.get_size(),
             num_gpus=num_gpus,
             exp_conf=exp_conf,
-            aggregation_frequency=aggregation_frequency,
-            steps_completed=steps_completed,
-            managed_training=managed_training,
             debug_enabled=debug_enabled,
             enable_tensorboard_logging=enable_tensorboard_logging,
         )
