@@ -97,7 +97,7 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
 
         self._trial_seed = trial_seed
 
-        self._init_device(self._num_gpus)
+        self._init_device()
 
         # Track which types we have issued warnings for in to_device().
         self._to_device_warned_types = set()  # type: Set[Type]
@@ -289,8 +289,8 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
             )
         return self._num_micro_batches_per_slot
 
-    def _init_device(self, n_gpus) -> None:
-        if not self.n_gpus:
+    def _init_device(self) -> None:
+        if not self.num_gpus:
             raise det.errors.InvalidExperimentException("GPUs required for DeepSpeedTrial.")
         if self.distributed.size > 1:
             self.device = torch.device("cuda", self.distributed.get_local_rank())
