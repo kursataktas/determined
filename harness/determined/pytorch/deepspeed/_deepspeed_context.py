@@ -143,7 +143,11 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         Check if the user specified options in optimizations are incompatible with
         DeepSpeedTrial.
         """
-        optimizations_config = self._exp_conf.get_optimizations_config()
+        if self._exp_conf is None:
+            optimizations_config = {}
+        else:
+            optimizations_config = self._exp_conf.get_optimizations_config()
+
         self._average_training_metrics = optimizations_config.get("average_training_metrics", False)
 
         mixed_precision_val = optimizations_config.get("mixed_precision", "O0")
