@@ -290,7 +290,7 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         return self._num_micro_batches_per_slot
 
     def _init_device(self) -> None:
-        if not self.num_gpus:
+        if not self._num_gpus:
             raise det.errors.InvalidExperimentException("GPUs required for DeepSpeedTrial.")
         if self.distributed.size > 1:
             self.device = torch.device("cuda", self.distributed.get_local_rank())
