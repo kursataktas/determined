@@ -5068,10 +5068,9 @@ workflows:
           matrix:
             parameters:
               name: [test-e2e-slurm-singularity-gcp]
-              mark: ["e2e_slurm and not parallel and not gpu_required"]
+              mark: ["e2e_slurm_preemption"]
           requires:
             - build-go
-            - request-hpc-tests
 
       # Podman over SLURM test on GCP
       - test-e2e-hpc-gcp:
