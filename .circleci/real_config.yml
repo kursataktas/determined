@@ -5068,9 +5068,10 @@ workflows:
           matrix:
             parameters:
               name: [test-e2e-slurm-singularity-gcp]
-              mark: ["e2e_slurm_preemption"]
+              mark: ["e2e_slurm and not parallel and not gpu_required"]
           requires:
             - build-go
+            - request-hpc-tests
 
       # Podman over SLURM test on GCP
       - test-e2e-hpc-gcp:
@@ -5265,14 +5266,6 @@ workflows:
             - package-and-push-system-local-ee
           extra-pytest-flags: "--no-compare-stats"
           collect-det-job-logs: false
-      - test-e2e-slurm:
-          name: test-e2e-slurm-preemption
-          context:
-            - dev-ci-cluster-default-user-credentials
-          mark: "e2e_slurm_preemption"
-          requires:
-            - package-and-push-system-local-ee
-          extra-pytest-flags: "--no-compare-stats"
       - test-e2e-slurm:
           name: test-e2e-slurm-znode
           context:
