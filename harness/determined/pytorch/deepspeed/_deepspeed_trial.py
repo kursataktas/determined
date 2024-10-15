@@ -695,6 +695,28 @@ class DeepSpeedTrialController:
         )
         return metrics
 
+    def _is_best_validation(self, now: float, before: Optional[float]) -> bool:
+        if before is None:
+            return True
+
+        return (now < before) if self.smaller_is_better else (now > before)
+
+    def _on_epoch_start(self, epoch_idx: int) -> None:
+        for callback in self.callbacks.values():
+            sig = inspect.signature(callback.on_training_epoch_start)
+            if sig.parameters:
+                callback.on_training_epoch_start(epoch_idx)
+            else:
+                logger.warning(
+                    "on_training_epoch_start() without parameters is deprecated"
+                    " since 0.17.8. Please add epoch_idx parameter."
+                )
+                callback.on_training_epoch_start()  # type: ignore[call-arg]
+
+    def _on_epoch_end(self, epoch_idx: int) -> None:
+        for callback in self.callbacks.values():
+            callback.on_training_epoch_end(epoch_idx)
+
     def _checkpoint(self, already_exiting: bool) -> None:
         if self.is_chief:
             self.core_context.train.set_status("checkpointing")
