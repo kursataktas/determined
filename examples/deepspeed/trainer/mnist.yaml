@@ -13,10 +13,7 @@ environment:
   environment_variables:
     - NCCL_DEBUG=INFO
     - NCCL_SOCKET_IFNAME=ens,eth,ib
-    - https_proxy=http://proxy.houston.hpecorp.net:8080/
-    - http_proxy=http://proxy.houston.hpecorp.net:8080/
-    - NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,10.43.255.24
-  image: determinedai/pytorch-infinityhub-hpc-dev:58a4f80
+  image: determinedai/pytorch-ngc-dev:0736b6d
 bind_mounts:
   - host_path: /tmp
     container_path: /data

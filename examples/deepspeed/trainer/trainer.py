@@ -12,7 +12,7 @@ def main(config_file: str):
         with open(config_file,"r") as f:
             experiment_config = yaml.load(f,Loader=yaml.SafeLoader)
         trial = DCGANTrial(train_context, experiment_config)
-        trainer = det.pytorch.Trainer(trial, train_context)
+        trainer = det_ds.Trainer(trial, train_context)
 
 if __name__ == "__main__":
     # Configure logging
