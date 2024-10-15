@@ -30,6 +30,14 @@ logger = logging.getLogger("determined.pytorch")
 def get_length(self: ds_loader.RepeatingLoader) -> int:
     return len(self.loader)
 
+def dataloader_next(dataloader_iter: Iterator) -> Iterator:
+    while True:
+        try:
+            batch = next(dataloader_iter)
+        except StopIteration:
+            return
+        yield batch
+
 
 ds_loader.RepeatingLoader.__len__ = get_length
 
@@ -310,6 +318,9 @@ class DeepSpeedTrialController:
             # shuffling values after we load state.
             self.training_iterator = (
                 iter(self.training_loader) if self.training_loader is not None else None
+            )
+            self.training_enumerator = enumerate(
+                dataloader_next(self.training_iterator), start=self.start_from_batch
             )
 
             def cleanup_iterator() -> None:
