@@ -34,7 +34,7 @@ def get_length(self: ds_loader.RepeatingLoader) -> int:
 ds_loader.RepeatingLoader.__len__ = get_length
 
 
-class DeepSpeedTrialController(det.TrialController):
+class DeepSpeedTrialController:
     def __init__(
         self,
         trial_inst: det.LegacyTrial,
@@ -52,17 +52,17 @@ class DeepSpeedTrialController(det.TrialController):
         step_zero_validation: bool,
         max_length: Optional[pytorch.TrainUnit],
         global_batch_size: Optional[int],
-        profiling_enabled: Optional[bool],
-        *args: Any,
-        **kwargs: Any,
+        profiling_enabled: Optional[bool]
     ) -> None:
-        super().__init__(*args, **kwargs)
 
         assert isinstance(
             trial_inst, DeepSpeedTrial
         ), "DeepSpeedTrialController needs a DeepSpeedTrial"
         self.trial = trial_inst
-        self.context = cast(det_ds.DeepSpeedTrialContext, context)
+        self.context = context
+        self.core_context = self.context._core
+
+        self.is_chief = self.context.distributed.rank == 0
 
         self.callbacks = self.trial.build_callbacks()
         for callback in self.callbacks.values():
@@ -102,7 +102,8 @@ class DeepSpeedTrialController(det.TrialController):
         self.reporting_period = reporting_period
 
         # Training loop state
-        if local_training:
+        self.local_training = local_training
+        if self.local_training:
             self.trial_id = 0
             assert self.max_length, "max_length must be specified for local-training mode."
             self.searcher_unit = self.max_length._to_searcher_unit()
@@ -325,6 +326,9 @@ class DeepSpeedTrialController(det.TrialController):
                     self.latest_checkpoint
                 ) as load_path:
                     self._load(load_path)
+            else:
+                # If we are not loading, initialize a fresh state.
+                self.state = pytorch.TrialState(trial_id=self.trial_id)
 
             for callback in self.callbacks.values():
                 callback.on_training_start()
@@ -336,6 +340,7 @@ class DeepSpeedTrialController(det.TrialController):
             self._run()
 
     def _run(self) -> None:
+        assert self.state
         if (
             self.step_zero_validation
             and self.val_from_previous_run is None
@@ -438,16 +443,6 @@ class DeepSpeedTrialController(det.TrialController):
 
     def get_epoch_idx(self, batch_id: int) -> int:
         return batch_id // cast(int, self.context._epoch_len)
-
-    def _steps_until_complete(self, train_unit: pytorch.TrainUnit) -> int:
-        assert isinstance(train_unit.value, int), "invalid length type"
-        assert self.state
-        if isinstance(train_unit, pytorch.Batch):
-            return train_unit.value - self.state.batches_trained
-        elif isinstance(train_unit, pytorch.Epoch):
-            return train_unit.value - self.state.epochs_trained
-        else:
-            raise ValueError(f"Unrecognized train unit {train_unit}")
 
     def _train_for_op(
         self, op: core.SearcherOperation, train_boundaries: List[pytorch.TrainBoundary]
@@ -689,6 +684,37 @@ class DeepSpeedTrialController(det.TrialController):
         )
         return metrics
 
+    def _checkpoint(self, already_exiting: bool) -> None:
+        if self.is_chief:
+            self.core_context.train.set_status("checkpointing")
+
+        assert self.state
+        self.state.last_ckpt = self.state.batches_trained
+
+        try:
+            uuid = ""
+            if self.is_chief:
+                metadata = {
+                    "determined_version": det.__version__,
+                    "steps_completed": self.state.batches_trained,
+                    "framework": f"torch-{torch.__version__}",
+                    "format": "pickle",
+                }
+                with self.context._core.checkpoint.store_path(metadata) as (
+                    path,
+                    storage_id,
+                ):
+                    self._save(path)
+                    uuid = storage_id
+            uuid = self.context.distributed.broadcast(uuid)
+            for callback in self.callbacks.values():
+                callback.on_checkpoint_upload_end(uuid=uuid)
+        except det.InvalidHP:
+            if not already_exiting:
+                self.core_context.train.report_early_exit(core.EarlyExitReason.INVALID_HP)
+                raise ShouldExit(skip_exit_checkpoint=True)
+            raise
+
     def _report_searcher_progress(
         self, op: core.SearcherOperation, unit: Optional[core.Unit]
     ) -> None:
@@ -710,6 +736,16 @@ class DeepSpeedTrialController(det.TrialController):
         assert self.state
         # State persists validation step in batches
         return self.state.last_val == self.state.batches_trained
+
+    def _steps_until_complete(self, train_unit: pytorch.TrainUnit) -> int:
+        assert isinstance(train_unit.value, int), "invalid length type"
+        assert self.state
+        if isinstance(train_unit, pytorch.Batch):
+            return train_unit.value - self.state.batches_trained
+        elif isinstance(train_unit, pytorch.Epoch):
+            return train_unit.value - self.state.epochs_trained
+        else:
+            raise ValueError(f"Unrecognized train unit {train_unit}")
 
     @torch.no_grad()
     def _validate(self, searcher_op: Optional[core.SearcherOperation] = None) -> Dict[str, Any]:
@@ -955,7 +991,7 @@ class DeepSpeedTrialController(det.TrialController):
                 hparams = None
 
             load_data = {
-                "trial_type": "PyTorchTrial",
+                "trial_type": "DeepSpeedTrial",
                 "experiment_config": exp_conf,
                 "hparams": hparams,
                 "trial_cls_spec": f"{trial_cls.__module__}:{trial_cls.__qualname__}",
@@ -1114,6 +1150,45 @@ class DeepSpeedTrialController(det.TrialController):
             if wlsq_path.exists():
                 with wlsq_path.open("rb") as f:
                     self._load_wlsq_state(pickle.load(f))
+
+    def _load_state(self, state: Any) -> None:
+        # Load our state from the checkpoint if we are continuing training after a pause or restart.
+        # If the trial_id doesn't match our current trial id, we're continuing training a previous
+        # trial and should start from a fresh state.
+        if state.get("trial_id") != self.trial_id:
+            self.state = pytorch.TrialState(trial_id=self.trial_id)
+            return
+
+        self.state = pytorch.TrialState(**state)
+        assert self.state
+
+        # Detect the case where the final validation we made was against this exact checkpoint.  In
+        # that case, the master will know about the validation, but it would not appear in the
+        # checkpoint state.  If the validation was before the last checkpoint, the checkpoint state
+        # is already correct, while any validations after the last checkpoint aren't valid anymore
+        # and can be safely ignored.
+        if self.state.batches_trained == self.val_from_previous_run:
+            self.state.last_val = self.state.batches_trained
+
+    def _load_wlsq_state(self, state: Any) -> None:
+        if state.get("trial_id") != self.trial_id:
+            self.state = pytorch.TrialState(trial_id=self.trial_id)
+            return
+
+        self.state = pytorch.TrialState(
+            trial_id=state.get("trial_id"),
+            last_ckpt=state.get("last_ckpt"),
+            last_val=state.get("last_val"),
+            step_id=state.get("step_id"),
+            # steps_completed is a legacy field kept to support loading from older checkpoints.
+            # checkpoints should only persist batches_trained and epochs_trained
+            batches_trained=state.get("steps_completed"),
+            epochs_trained=self._get_epoch_idx(state.get("steps_completed")),
+        )
+
+        assert self.state
+        if self.state.batches_trained == self.val_from_previous_run:
+            self.state.last_val = self.state.batches_trained
 
     def _sync_device(self) -> None:
         torch.cuda.synchronize(self.context.device)

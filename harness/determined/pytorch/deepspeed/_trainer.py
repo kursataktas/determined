@@ -182,7 +182,7 @@ class Trainer:
             if global_batch_size:
                 global_batch_size = int(global_batch_size)
 
-            trial_controller = det_ds.DeepSpeedTrialController(
+        trial_controller = det_ds.DeepSpeedTrialController(
             trial_inst=self._trial,
             context=self._context,
             checkpoint_period=checkpoint_period,
