@@ -359,105 +359,68 @@ class DeepSpeedTrialController:
 
     def _run(self) -> None:
         assert self.state
-        if (
-            self.step_zero_validation
-            and self.val_from_previous_run is None
-            and self.state.batches_trained == 0
-        ):
-            self._validate()
 
-        if self.local_training:
-            assert self.max_length and isinstance(self.max_length.value, int)
-            ops = iter(
-                [
-                    det.core.DummySearcherOperation(
-                        length=self.max_length.value, is_chief=self.is_chief
-                    )
-                ]
-            )
-        else:
-            ops = self.core_context.searcher.operations()
+        try:
+            if (
+                self.step_zero_validation
+                and self.val_from_previous_run is None
+                and self.state.batches_trained == 0
+            ):
+                self._validate()
 
-        for op in ops:
             if self.local_training:
-                train_unit = self.max_length
-            else:
-                train_unit = pytorch.TrainUnit._from_searcher_unit(
-                    op.length, self.searcher_unit, self.global_batch_size
-                )
-            assert train_unit
-
-        self._train_for_op(
-            op=op,
-            train_boundaries=[
-                pytorch.TrainBoundary(
-                    step_type=pytorch.TrainBoundaryType.TRAIN,
-                    unit=train_unit,
-                ),
-                pytorch.TrainBoundary(
-                    step_type=pytorch.TrainBoundaryType.VALIDATE, unit=self.validation_period
-                ),
-                pytorch.TrainBoundary(
-                    step_type=pytorch.TrainBoundaryType.CHECKPOINT,
-                    unit=self.checkpoint_period,
-                ),
-                # Scheduling unit is always configured in batches
-                pytorch.TrainBoundary(
-                    step_type=pytorch.TrainBoundaryType.REPORT, unit=self.reporting_period
-                ),
-            ],
-        )
-
-        assert self.workloads is not None
-        for w, response_func in self.workloads:
-            try:
-                if w.kind == workload.Workload.Kind.RUN_STEP:
-                    action = "training"
-                    metrics = self._train_for_step(
-                        w.step_id,
-                        w.num_batches,
-                        w.total_batches_processed,
-                    )
-                    response = {
-                        "metrics": metrics,
-                        "stop_requested": self.context.get_stop_requested(),
-                    }  # type: workload.Response
-                    metrics = self.context.distributed.broadcast(metrics)
-                    for callback in self.callbacks.values():
-                        callback.on_training_workload_end(
-                            avg_metrics=metrics["avg_metrics"],
-                            batch_metrics=metrics["batch_metrics"],
+                assert self.max_length and isinstance(self.max_length.value, int)
+                ops = iter(
+                    [
+                        det.core.DummySearcherOperation(
+                            length=self.max_length.value, is_chief=self.is_chief
                         )
-                elif w.kind == workload.Workload.Kind.COMPUTE_VALIDATION_METRICS:
-                    action = "validation"
-                    response = {
-                        "metrics": self._compute_validation_metrics(),
-                        "stop_requested": self.context.get_stop_requested(),
-                    }
-                elif w.kind == workload.Workload.Kind.CHECKPOINT_MODEL:
-                    action = "checkpointing"
-                    metadata = {
-                        "steps_completed": self.steps_completed,
-                        "framework": f"torch-{torch.__version__}",
-                        "format": "pickle",
-                    }
-                    with self.context._core.checkpoint.store_path(metadata, shard=True) as (
-                        path,
-                        storage_id,
-                    ):
-                        self._save(path)
-                    response = {"uuid": storage_id}
-                    for callback in self.callbacks.values():
-                        callback.on_checkpoint_upload_end(uuid=storage_id)
-                else:
-                    raise AssertionError("Unexpected workload: {}".format(w.kind))
+                    ]
+                )
+            else:
+                ops = self.core_context.searcher.operations()
 
-            except det.InvalidHP as e:
-                logger.info(f"Invalid hyperparameter exception during {action}: {e}")
-                response = workload.InvalidHP()
-            response_func(response)
-            self.context._maybe_reset_tbd_writer()
-            self.upload_tb_files()
+            for op in ops:
+                if self.local_training:
+                    train_unit = self.max_length
+                else:
+                    train_unit = pytorch.TrainUnit._from_searcher_unit(
+                        op.length, self.searcher_unit, self.global_batch_size
+                    )
+                assert train_unit
+
+                self._train_for_op(
+                    op=op,
+                    train_boundaries=[
+                        pytorch.TrainBoundary(
+                            step_type=pytorch.TrainBoundaryType.TRAIN,
+                            unit=train_unit,
+                        ),
+                        pytorch.TrainBoundary(
+                            step_type=pytorch.TrainBoundaryType.VALIDATE, unit=self.validation_period
+                        ),
+                        pytorch.TrainBoundary(
+                            step_type=pytorch.TrainBoundaryType.CHECKPOINT,
+                            unit=self.checkpoint_period,
+                        ),
+                        # Scheduling unit is always configured in batches
+                        pytorch.TrainBoundary(
+                            step_type=pytorch.TrainBoundaryType.REPORT, unit=self.reporting_period
+                        ),
+                    ],
+                )
+        except pytorch.ShouldExit as e:
+            # Checkpoint unsaved work and exit.
+            if not e.skip_exit_checkpoint and not self._checkpoint_is_current():
+                self._checkpoint(already_exiting=True)
+
+        except det.InvalidHP as e:
+            # Catch InvalidHP to checkpoint before exiting and re-raise for cleanup by core.init()
+            if not self._checkpoint_is_current():
+                self._checkpoint(already_exiting=True)
+            raise e
+
+        return
 
     def get_epoch_idx(self, batch_id: int) -> int:
         return batch_id // cast(int, self.context._epoch_len)
