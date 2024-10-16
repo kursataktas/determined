@@ -580,17 +580,14 @@ class DeepSpeedTrialController:
         per_batch_metrics = []  # type: List[Dict]
 
         for _ in range(num_train_batch_calls):
-            if self.context.experimental._auto_to_device:
-                batch = self.context.to_device(batch)  # type: ignore
-
             with contextlib.ExitStack() as exit_stack:
                 if self.context.profiler:
                     exit_stack.enter_context(self.context.profiler)
 
                 training_metrics = self.trial.train_batch(
-                    dataloader_iter=self.training_iterator,
-                    epoch_idx=epoch_idx,
-                    batch_idx=batch_idx,
+                    self.training_iterator,
+                    epoch_idx,
+                    batch_idx,
                 )
 
                 if self.context.profiler:
@@ -620,10 +617,6 @@ class DeepSpeedTrialController:
             assert (
                 model0.micro_steps % self.context.num_micro_batches_per_slot == 0
             ), "did not train for gradient accumulation steps"
-
-        # Step learning rate of a pytorch.LRScheduler.
-        for lr_scheduler in self.context.lr_schedulers:
-            self._auto_step_lr_scheduler_per_batch(batch_idx, lr_scheduler)
 
         batch_dur = time.time() - batch_start_time
         samples_per_second = self.trial.get_batch_length(batch) / batch_dur
@@ -811,8 +804,6 @@ class DeepSpeedTrialController:
 
             idx = -1  # Later, we'll use this default to see if we've iterated at all.
             for idx, batch in enumerate(iter(self.validation_loader)):
-                if self.context.experimental._auto_to_device:
-                    batch = self.context.to_device(batch)
                 num_inputs += self.trial.get_batch_length(batch)
 
                 if util.has_param(self.trial.evaluate_batch, "batch_idx", 2):
@@ -969,6 +960,116 @@ class DeepSpeedTrialController:
                 self.context.get_tensorboard_writer(), "val", self.steps_completed, metrics
             )
 
+    def _load(self, load_path: pathlib.Path) -> None:
+        # Right now we will load all checkpoint shards on each node regardless of which
+        # checkpoints are needed.
+        # TODO (Liam): revisit later to optimize sharded checkpoint loading.
+
+        # Load stateful things tracked by Determined on all slots.
+        ckpt_path = f"det_state_dict_rank{self.context.distributed.rank}.pth"
+        maybe_ckpt = load_path.joinpath(ckpt_path)
+
+        if not maybe_ckpt.exists():
+            return
+
+        checkpoint = torch.load(str(maybe_ckpt), map_location="cpu")
+        if not isinstance(checkpoint, dict):
+            raise det.errors.InvalidExperimentException(
+                f"Expected checkpoint at {maybe_ckpt} to be a dict "
+                f"but got {type(checkpoint).__name__}."
+            )
+
+        for callback in self.callbacks.values():
+            callback.on_checkpoint_load_start(checkpoint)
+
+        # We allow users to override load behavior if needed, but we default to using
+        # the load method provided by DeepSpeed.
+        self.trial.load(self.context, load_path)
+
+        if "rng_state" in checkpoint:
+            rng_state = checkpoint["rng_state"]
+            np.random.set_state(rng_state["np_rng_state"])
+            random.setstate(rng_state["random_rng_state"])
+            torch.random.set_rng_state(rng_state["cpu_rng_state"])
+
+            if torch.cuda.device_count():
+                if "gpu_rng_state" in rng_state:
+                    torch.cuda.set_rng_state(
+                        rng_state["gpu_rng_state"], device=self.context.distributed.get_local_rank()
+                    )
+                else:
+                    logger.warning(
+                        "The system has a gpu but no gpu_rng_state exists in the checkpoint."
+                    )
+            else:
+                if "gpu_rng_state" in rng_state:
+                    logger.warning(
+                        "There exists gpu_rng_state in checkpoint but the system has no gpu."
+                    )
+        else:
+            logger.warning("The checkpoint has no random state to restore.")
+
+        callback_state = checkpoint.get("callbacks", {})
+        for name in self.callbacks:
+            if name in callback_state:
+                self.callbacks[name].load_state_dict(callback_state[name])
+            elif util.is_overridden(self.callbacks[name].load_state_dict, pytorch.PyTorchCallback):
+                logger.warning(
+                    "Callback '{}' implements load_state_dict(), but no callback state "
+                    "was found for that name when restoring from checkpoint. This "
+                    "callback will be initialized from scratch"
+                )
+
+        save_path = load_path.joinpath("trial_state.pkl")
+        if save_path.exists():
+            with save_path.open("rb") as f:
+                self._load_state(pickle.load(f))
+
+        # Load workload sequencer state.
+        wlsq_path = load_path.joinpath("workload_sequencer.pkl")
+        if self.wlsq is not None and wlsq_path.exists():
+            with wlsq_path.open("rb") as f:
+                self._load_wlsq_state(pickle.load(f))
+
+    def _load_state(self, state: Any) -> None:
+        # Load our state from the checkpoint if we are continuing training after a pause or restart.
+        # If the trial_id doesn't match our current trial id, we're continuing training a previous
+        # trial and should start from a fresh state.
+        if state.get("trial_id") != self.trial_id:
+            self.state = pytorch.TrialState(trial_id=self.trial_id)
+            return
+
+        self.state = pytorch.TrialState(**state)
+        assert self.state
+
+        # Detect the case where the final validation we made was against this exact checkpoint.  In
+        # that case, the master will know about the validation, but it would not appear in the
+        # checkpoint state.  If the validation was before the last checkpoint, the checkpoint state
+        # is already correct, while any validations after the last checkpoint aren't valid anymore
+        # and can be safely ignored.
+        if self.state.batches_trained == self.val_from_previous_run:
+            self.state.last_val = self.state.batches_trained
+
+    def _load_wlsq_state(self, state: Any) -> None:
+        if state.get("trial_id") != self.trial_id:
+            self.state = pytorch.TrialState(trial_id=self.trial_id)
+            return
+
+        self.state = pytorch.TrialState(
+            trial_id=state.get("trial_id"),
+            last_ckpt=state.get("last_ckpt"),
+            last_val=state.get("last_val"),
+            step_id=state.get("step_id"),
+            # steps_completed is a legacy field kept to support loading from older checkpoints.
+            # checkpoints should only persist batches_trained and epochs_trained
+            batches_trained=state.get("steps_completed"),
+            epochs_trained=self._get_epoch_idx(state.get("steps_completed")),
+        )
+
+        assert self.state
+        if self.state.batches_trained == self.val_from_previous_run:
+            self.state.last_val = self.state.batches_trained
+
     def _save(self, path: pathlib.Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
 
@@ -1041,148 +1142,6 @@ class DeepSpeedTrialController:
             callback.on_checkpoint_end(str(path))
             callback.on_checkpoint_write_end(str(path))
 
-    def _load(self, load_path: pathlib.Path) -> None:
-        # Backwards compat with older checkpoint formats. List is of the newest to
-        # the oldest known state_dict locations.
-        potential_paths = [
-            ["state_dict.pth"],
-            ["determined", "state_dict.pth"],
-            ["pedl", "state_dict.pth"],
-            ["checkpoint.pt"],
-        ]
-
-        checkpoint: Optional[Dict[str, Any]] = None
-        for ckpt_path in potential_paths:
-            maybe_ckpt = load_path.joinpath(*ckpt_path)
-            if maybe_ckpt.exists():
-                checkpoint = torch.load(str(maybe_ckpt), map_location="cpu")
-                break
-
-        if checkpoint is None or not isinstance(checkpoint, dict):
-            return
-
-        for callback in self.callbacks.values():
-            callback.on_checkpoint_load_start(checkpoint)
-
-        if "model_state_dict" in checkpoint:
-            # Backward compatible with older checkpoint format.
-            if "models_state_dict" in checkpoint:
-                raise RuntimeError("Both model_state_dict and models_state_dict in checkpoint.")
-            if len(self.context.models) > 1:
-                raise RuntimeError(
-                    "Old-format checkpoint cannot be loaded into a context with more than one "
-                    "model."
-                )
-            self.context.models[0].load_state_dict(checkpoint["model_state_dict"])
-        else:
-            for idx, model in enumerate(self.context.models):
-                model_state_dict = checkpoint["models_state_dict"][idx]
-                try:
-                    model.load_state_dict(model_state_dict)
-                except Exception:
-                    # If the checkpointed model is non-DDP and the current model is DDP, append
-                    # module prefix to the checkpointed data
-                    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                        logger.debug("Loading non-DDP checkpoint into a DDP model.")
-                        self._add_prefix_in_state_dict_if_not_present(model_state_dict, "module.")
-                    else:
-                        # If the checkpointed model is DDP and if we are currently running in
-                        # single-slot mode, remove the module prefix from checkpointed data
-                        logger.debug("Loading DDP checkpoint into a non-DDP model.")
-                        torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(
-                            model_state_dict, "module."
-                        )
-                    model.load_state_dict(model_state_dict)
-
-        if "optimizer_state_dict" in checkpoint:
-            # Backward compatible with older checkpoint format.
-            if "optimizers_state_dict" in checkpoint:
-                raise RuntimeError(
-                    "Both optimizer_state_dict and optimizers_state_dict in checkpoint."
-                )
-            if len(self.context.optimizers) > 1:
-                raise RuntimeError(
-                    "Old-format checkpoint cannot be loaded into a context with more than one "
-                    "optimizer."
-                )
-            self.context.optimizers[0].load_state_dict(checkpoint["optimizer_state_dict"])
-        else:
-            for idx, optimizer in enumerate(self.context.optimizers):
-                optimizer.load_state_dict(checkpoint["optimizers_state_dict"][idx])
-
-        if "lr_scheduler" in checkpoint:
-            # Backward compatible with older checkpoint format.
-            if "lr_schedulers_state_dict" in checkpoint:
-                raise RuntimeError("Both lr_scheduler and lr_schedulers_state_dict in checkpoint.")
-            if len(self.context.lr_schedulers) > 1:
-                raise RuntimeError(
-                    "Old-format checkpoint cannot be loaded into a context with more than one LR "
-                    "scheduler."
-                )
-            self.context.lr_schedulers[0].load_state_dict(checkpoint["lr_scheduler"])
-        else:
-            for idx, lr_scheduler in enumerate(self.context.lr_schedulers):
-                lr_scheduler.load_state_dict(checkpoint["lr_schedulers_state_dict"][idx])
-
-        if "scaler_state_dict" in checkpoint:
-            if self.context._scaler:
-                self.context._scaler.load_state_dict(checkpoint["scaler_state_dict"])
-            else:
-                logger.warning(
-                    "There exists scaler_state_dict in checkpoint but the experiment is not using "
-                    "AMP."
-                )
-        else:
-            if self.context._scaler:
-                logger.warning(
-                    "The experiment is using AMP but scaler_state_dict does not exist in the "
-                    "checkpoint."
-                )
-
-        if "rng_state" in checkpoint:
-            rng_state = checkpoint["rng_state"]
-            np.random.set_state(rng_state["np_rng_state"])
-            random.setstate(rng_state["random_rng_state"])
-            torch.random.set_rng_state(rng_state["cpu_rng_state"])
-
-            if torch.cuda.device_count():
-                if "gpu_rng_state" in rng_state:
-                    torch.cuda.set_rng_state(
-                        rng_state["gpu_rng_state"], device=self.context.distributed.local_rank
-                    )
-                else:
-                    logger.warning(
-                        "The system has a gpu but no gpu_rng_state exists in the checkpoint."
-                    )
-            else:
-                if "gpu_rng_state" in rng_state:
-                    logger.warning(
-                        "There exists gpu_rng_state in checkpoint but the system has no gpu."
-                    )
-        else:
-            logger.warning("The checkpoint has no random state to restore.")
-
-        callback_state = checkpoint.get("callbacks", {})
-        for name in self.callbacks:
-            if name in callback_state:
-                self.callbacks[name].load_state_dict(callback_state[name])
-            elif util.is_overridden(self.callbacks[name].load_state_dict, pytorch.PyTorchCallback):
-                logger.warning(
-                    f"Callback '{name}' implements load_state_dict(), but no callback state "
-                    "was found for that name when restoring from checkpoint. This "
-                    "callback will be initialized from scratch."
-                )
-
-        save_path = load_path.joinpath("trial_state.pkl")
-        if save_path.exists():
-            with save_path.open("rb") as f:
-                self._load_state(pickle.load(f))
-        else:
-            # Support legacy save states.
-            wlsq_path = load_path.joinpath("workload_sequencer.pkl")
-            if wlsq_path.exists():
-                with wlsq_path.open("rb") as f:
-                    self._load_wlsq_state(pickle.load(f))
 
     def _load_state(self, state: Any) -> None:
         # Load our state from the checkpoint if we are continuing training after a pause or restart.
@@ -1227,7 +1186,7 @@ class DeepSpeedTrialController:
         torch.cuda.synchronize(self.context.device)
 
 
-class DeepSpeedTrial(det.LegacyTrial):
+class DeepSpeedTrial:
     """
     DeepSpeed trials are created by subclassing this abstract class.
 
