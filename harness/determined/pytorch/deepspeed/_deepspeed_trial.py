@@ -539,9 +539,9 @@ class DeepSpeedTrialController:
     def _train_batch(
         self, batch: pytorch.TorchData, epoch_idx: int, batch_idx: int
     ) -> Dict[str, Any]:
-        num_train_batch_calls = self.context.num_micro_batches_per_slot
+        num_micro_batches = self.context.num_micro_batches_per_slot
         if self.context.use_pipeline_parallel or self.context._manual_grad_accumulation:
-            num_train_batch_calls = 1
+            num_micro_batches = 1
 
         # Reset loss IDs for AMP
         self.context._loss_ids = {}
@@ -549,7 +549,7 @@ class DeepSpeedTrialController:
         batch_start_time = time.time()
         per_batch_metrics = []  # type: List[Dict]
 
-        for _ in range(num_train_batch_calls):
+        for _ in range(num_micro_batches):
             with contextlib.ExitStack() as exit_stack:
                 if self.context.profiler:
                     exit_stack.enter_context(self.context.profiler)
@@ -939,15 +939,25 @@ class DeepSpeedTrialController:
         # Right now we will load all checkpoint shards on each node regardless of which
         # checkpoints are needed.
         # TODO (Liam): revisit later to optimize sharded checkpoint loading.
+        potential_paths = [
+            ["state_dict.pth"],
+            ["determined", "state_dict.pth"],
+            ["pedl", "state_dict.pth"],
+            ["checkpoint.pt"],
+            [f"det_state_dict_rank{self.context.distributed.rank}.pth"]
+        ]
 
         # Load stateful things tracked by Determined on all slots.
-        ckpt_path = f"det_state_dict_rank{self.context.distributed.rank}.pth"
-        maybe_ckpt = load_path.joinpath(ckpt_path)
+        checkpoint: Optional[Dict[str, Any]] = None
+        for ckpt_path in potential_paths:
+            maybe_ckpt = load_path.joinpath(*ckpt_path)
+            if maybe_ckpt.exists():
+                checkpoint = torch.load(str(maybe_ckpt), map_location="cpu")
+                break
 
-        if not maybe_ckpt.exists():
+        if checkpoint is None or not isinstance(checkpoint, dict):
             return
 
-        checkpoint = torch.load(str(maybe_ckpt), map_location="cpu")
         if not isinstance(checkpoint, dict):
             raise det.errors.InvalidExperimentException(
                 f"Expected checkpoint at {maybe_ckpt} to be a dict "
@@ -1050,6 +1060,10 @@ class DeepSpeedTrialController:
 
         util.write_user_code(path, not self.local_training)
 
+        if self.wlsq is not None:
+            with path.joinpath("workload_sequencer.pkl").open("wb") as f:
+                pickle.dump(self.wlsq.get_state(), f)
+
         rng_state = {
             "cpu_rng_state": torch.random.get_rng_state(),
             "np_rng_state": np.random.get_state(),
@@ -1067,13 +1081,6 @@ class DeepSpeedTrialController:
         # objects) to avoid breaking the connection between the model and the
         # optimizer.
         checkpoint = {
-            "models_state_dict": [model.state_dict() for model in self.context.models],
-            "optimizers_state_dict": [
-                optimizer.state_dict() for optimizer in self.context.optimizers
-            ],
-            "lr_schedulers_state_dict": [
-                lr_scheduler.state_dict() for lr_scheduler in self.context.lr_schedulers
-            ],
             "callbacks": {name: callback.state_dict() for name, callback in self.callbacks.items()},
             "rng_state": rng_state,
         }
@@ -1089,6 +1096,10 @@ class DeepSpeedTrialController:
         assert self.state
         with path.joinpath("trial_state.pkl").open("wb") as f:
             pickle.dump(vars(self.state), f)
+
+        # We allow users to override save behavior if needed, but we default to using
+        # the save method provided by DeepSpeed.
+        self.trial.save(self.context, path)
 
         trial_cls = type(self.trial)
         with open(path.joinpath("load_data.json"), "w") as f2:
