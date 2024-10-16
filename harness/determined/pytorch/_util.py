@@ -101,6 +101,14 @@ class Batch(TrainUnit):
     def _from_records(records: int, global_batch_size: int) -> "Batch":
         return Batch(max(records // global_batch_size, 1))
 
+class ShouldExit(Exception):
+    """
+    ShouldExit breaks out of the top-level train loop from inside function calls.
+    """
+
+    def __init__(self, skip_exit_checkpoint: bool = False):
+        self.skip_exit_checkpoint = skip_exit_checkpoint
+
 class TrialState:
     def __init__(
         self,

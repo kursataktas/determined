@@ -745,9 +745,14 @@ class DeepSpeedTrialController:
         except det.InvalidHP:
             if not already_exiting:
                 self.core_context.train.report_early_exit(core.EarlyExitReason.INVALID_HP)
-                raise ShouldExit(skip_exit_checkpoint=True)
+                raise pytorch.ShouldExit(skip_exit_checkpoint=True)
             raise
 
+    def _stop_requested(self) -> None:
+        if self.core_context.preempt.should_preempt():
+            raise pytorch.ShouldExit()
+        if self.context.get_stop_requested():
+            raise pytorch.ShouldExit()
     def _report_searcher_progress(
         self, op: core.SearcherOperation, unit: Optional[core.Unit]
     ) -> None:

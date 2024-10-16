@@ -38,15 +38,6 @@ def dataloader_next(dataloader_iter: Iterator) -> Iterator:
         yield batch
 
 
-class ShouldExit(Exception):
-    """
-    ShouldExit breaks out of the top-level train loop from inside function calls.
-    """
-
-    def __init__(self, skip_exit_checkpoint: bool = False):
-        self.skip_exit_checkpoint = skip_exit_checkpoint
-
-
 class _PyTorchTrialController:
     def __init__(
         self,
@@ -277,7 +268,7 @@ class _PyTorchTrialController:
         except det.InvalidHP:
             if not already_exiting:
                 self.core_context.train.report_early_exit(core.EarlyExitReason.INVALID_HP)
-                raise ShouldExit(skip_exit_checkpoint=True)
+                raise pytorch.ShouldExit(skip_exit_checkpoint=True)
             raise
 
     def _check_evaluate_implementation(self) -> None:
@@ -377,9 +368,9 @@ class _PyTorchTrialController:
 
     def _stop_requested(self) -> None:
         if self.core_context.preempt.should_preempt():
-            raise ShouldExit()
+            raise pytorch.ShouldExit()
         if self.context.get_stop_requested():
-            raise ShouldExit()
+            raise pytorch.ShouldExit()
 
     def _report_searcher_progress(
         self, op: core.SearcherOperation, unit: Optional[core.Unit]
@@ -535,7 +526,7 @@ class _PyTorchTrialController:
                         ),
                     ],
                 )
-        except ShouldExit as e:
+        except pytorch.ShouldExit as e:
             # Checkpoint unsaved work and exit.
             if not e.skip_exit_checkpoint and not self._checkpoint_is_current():
                 self._checkpoint(already_exiting=True)
@@ -669,7 +660,7 @@ class _PyTorchTrialController:
             # op.length was already trained for and validated on; in that case just raise
             # ShouldExit; we have nothing to do.
             if not op._completed:
-                raise ShouldExit(skip_exit_checkpoint=True)
+                raise pytorch.ShouldExit(skip_exit_checkpoint=True)
 
     def _check_searcher_metric(self, val_metrics: Dict) -> Any:
         if self.searcher_metric_name not in val_metrics:
