@@ -16,7 +16,7 @@ import torch
 from deepspeed.runtime import dataloader as ds_loader
 
 import determined as det
-from determined import core, pytorch, util, workload
+from determined import core, pytorch, tensorboard, util, workload
 from determined.pytorch import deepspeed as det_ds
 
 logger = logging.getLogger("determined.pytorch")
@@ -147,6 +147,13 @@ class DeepSpeedTrialController:
         random.seed(trial_seed)
         np.random.seed(trial_seed)
         torch.random.manual_seed(trial_seed)
+
+    def _upload_tb_files(self) -> None:
+        self.context._maybe_reset_tbd_writer()
+        self.core_context.train.upload_tensorboard_files(
+            (lambda _: True) if self.is_chief else (lambda p: not p.match("*tfevents*")),
+            tensorboard.util.get_rank_aware_path,
+        )
 
     @classmethod
     def from_trial(
