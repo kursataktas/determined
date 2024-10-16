@@ -480,3 +480,23 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         Return whether automatic tensorboard logging is enabled
         """
         return self._enable_tensorboard_logging
+
+    def get_stop_requested(self) -> bool:
+        """
+        Return whether a trial stoppage has been requested.
+        """
+        return self._stop_requested
+
+    def set_stop_requested(self, stop_requested: bool) -> None:
+        """
+        Set a flag to request a trial stoppage. When this flag is set to True,
+        we finish the step, checkpoint, then exit.
+        """
+        if not isinstance(stop_requested, bool):
+            raise AssertionError("stop_requested must be a boolean")
+
+        logger.info(
+            "A trial stoppage has requested. The trial will be stopped "
+            "at the end of the current step."
+        )
+        self._stop_requested = stop_requested
