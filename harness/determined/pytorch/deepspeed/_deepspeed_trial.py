@@ -1403,3 +1403,33 @@ class DeepSpeedTrial:
                 # DeepSpeed does not provide an error message with many assertion errors in the
                 # checkpoint load module.
                 raise AssertionError("Failed to load deepspeed checkpoint.")
+
+    def get_batch_length(self, batch: Any) -> int:
+        """Count the number of records in a given batch.
+
+        Override this method when you are using custom batch types, as produced
+        when iterating over the class:`determined.pytorch.DataLoader`.
+        For example, when using ``pytorch_geometric``:
+
+        .. code-block:: python
+
+            # Extra imports:
+            from determined.pytorch import DataLoader
+            from torch_geometric.data.dataloader import Collater
+
+            # Trial methods:
+            def build_training_data_loader(self):
+                return DataLoader(
+                    self.train_subset,
+                    batch_size=self.context.get_per_slot_batch_size(),
+                    collate_fn=Collater([], []),
+                )
+
+            def get_batch_length(self, batch):
+                # `batch` is `torch_geometric.data.batch.Batch`.
+                return batch.num_graphs
+
+        Arguments:
+            batch (Any): input training or validation data batch object.
+        """
+        return pytorch.data_length(batch)
