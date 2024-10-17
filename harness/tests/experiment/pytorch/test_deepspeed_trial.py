@@ -40,7 +40,7 @@ class TestDeepSpeedTrial:
             train_steps, metrics = trial_controller._train_with_boundaries(
                 training_enumerator=enumerate(trial_controller.training_iterator),
                 train_boundaries=[
-                    pytorch._TrainBoundary(
+                    pytorch.TrainBoundary(
                         step_type=pytorch.TrainBoundaryType.TRAIN, unit=pytorch.Batch(100)
                     )
                 ],
