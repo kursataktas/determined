@@ -334,9 +334,10 @@ class DeepSpeedTrialController:
             )
 
             def cleanup_iterator() -> None:
-                # Explicitly trigger the training iterator's shutdown (which happens in __del__).
+                # Explicitly trigger the iterator's shutdown (which happens in __del__).
                 # See the rather long note in pytorch/torch/utils/data/dataloader.py.
                 del self.training_iterator
+                del self.validation_iterator
 
             exit_stack.enter_context(defer(cleanup_iterator))
 
