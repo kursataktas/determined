@@ -481,6 +481,69 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         """
         return self._enable_tensorboard_logging
 
+    def get_global_batch_size(self) -> int:
+        """
+        Return the global batch size.
+        """
+        if self._global_batch_size is None:
+            raise ValueError(
+                "global_batch_size is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+        return self._global_batch_size
+
+    def get_per_slot_batch_size(self) -> int:
+        """
+        Return the per-slot batch size. When a model is trained with a single GPU, this is equal to
+        the global batch size. When multi-GPU training is used, this is equal to the global batch
+        size divided by the number of GPUs used to train the model.
+        """
+        if self._per_slot_batch_size is None:
+            raise ValueError(
+                "per_slot_batch_size is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+
+        return self._per_slot_batch_size
+
+    def get_experiment_config(self) -> Dict[str, Any]:
+        if self._exp_conf is None:
+            raise ValueError(
+                "exp_conf is undefined in this Trial. Please check the init() call to Trainer API."
+            )
+        return self._exp_conf
+
+    def get_hparam(self, name: str) -> Any:
+        """
+        Return the current value of the hyperparameter with the given name.
+        """
+        if self._hparams is None:
+            raise ValueError(
+                "hparams is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+        if name not in self.get_hparams():
+            raise ValueError(
+                "Could not find name '{}' in experiment "
+                "hyperparameters. Please check your experiment "
+                "configuration 'hyperparameters' section.".format(name)
+            )
+        if name == "global_batch_size":
+            logger.warning(
+                "Please use `context.get_per_slot_batch_size()` and "
+                "`context.get_global_batch_size()` instead of accessing "
+                "`global_batch_size` directly."
+            )
+        return self.get_hparams()[name]
+
+    def get_hparams(self) -> Dict[str, Any]:
+        if self._hparams is None:
+            raise ValueError(
+                "hparams is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+        return self._hparams
+
     def get_stop_requested(self) -> bool:
         """
         Return whether a trial stoppage has been requested.

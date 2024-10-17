@@ -1010,11 +1010,6 @@ class DeepSpeedTrialController:
             with save_path.open("rb") as f:
                 self._load_state(pickle.load(f))
 
-        # Load workload sequencer state.
-        wlsq_path = load_path.joinpath("workload_sequencer.pkl")
-        if self.wlsq is not None and wlsq_path.exists():
-            with wlsq_path.open("rb") as f:
-                self._load_wlsq_state(pickle.load(f))
 
     def _load_state(self, state: Any) -> None:
         # Load our state from the checkpoint if we are continuing training after a pause or restart.
@@ -1060,9 +1055,6 @@ class DeepSpeedTrialController:
 
         util.write_user_code(path, not self.local_training)
 
-        if self.wlsq is not None:
-            with path.joinpath("workload_sequencer.pkl").open("wb") as f:
-                pickle.dump(self.wlsq.get_state(), f)
 
         rng_state = {
             "cpu_rng_state": torch.random.get_rng_state(),
@@ -1084,9 +1076,6 @@ class DeepSpeedTrialController:
             "callbacks": {name: callback.state_dict() for name, callback in self.callbacks.items()},
             "rng_state": rng_state,
         }
-
-        if self.context._scaler:
-            checkpoint["scaler_state_dict"] = self.context._scaler.state_dict()
 
         for callback in self.callbacks.values():
             callback.on_checkpoint_save_start(checkpoint)
