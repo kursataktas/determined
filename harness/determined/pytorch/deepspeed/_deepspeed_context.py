@@ -304,6 +304,15 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
             self.device = torch.device("cuda", 0)
         assert self.device is not None, "Error setting torch device."
 
+    def _set_default_gradient_compression(self, gradient_compression: bool) -> None:
+        self._fp16_compression_default = gradient_compression
+
+    def _set_default_average_aggregated_gradients(self, average_aggregated_gradients: bool) -> None:
+        self._average_aggregated_gradients_default = average_aggregated_gradients
+
+    def _set_is_pre_trainer(self) -> None:
+        self._is_pre_trainer = True
+
     def to_device(self, data: pytorch._Data) -> pytorch.TorchData:
         """Map data to the device allocated by the Determined cluster.
 
