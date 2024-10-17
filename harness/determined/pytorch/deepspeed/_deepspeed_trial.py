@@ -1346,6 +1346,13 @@ class DeepSpeedTrial:
         """
         pass
 
+    def evaluation_reducer(self) -> Union[pytorch.Reducer, Dict[str, pytorch.Reducer]]:
+        """
+        Return a reducer for all evaluation metrics, or a dict mapping metric
+        names to individual reducers. Defaults to :obj:`determined.pytorch.Reducer.AVG`.
+        """
+        return pytorch.Reducer.AVG
+
     def save(self, context: det_ds.DeepSpeedTrialContext, path: pathlib.Path) -> None:
         """
         Save is called on every GPU to make sure all checkpoint shards are saved.
