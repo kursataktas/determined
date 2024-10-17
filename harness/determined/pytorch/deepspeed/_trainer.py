@@ -293,6 +293,8 @@ def init(
             slots_per_trial=core_context.distributed.get_size(),
             num_gpus=num_gpus,
             exp_conf=exp_conf,
+            aggregation_frequency=aggregation_frequency,
+            steps_completed=steps_completed,
             debug_enabled=debug_enabled,
             enable_tensorboard_logging=enable_tensorboard_logging,
         )
