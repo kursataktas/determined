@@ -182,11 +182,11 @@ class DCGANTrial(DeepSpeedTrial):
         }
 
     def evaluate_batch(
-        self, iter_dataloader: Optional[Iterator[TorchData]], batch_idx: int
+        self, dataloader_iter: Optional[Iterator[TorchData]], batch_idx: int
     ) -> Dict[str, Any]:
         # TODO: We could add an evaluation metric like FID here.
-        assert iter_dataloader is not None
-        next(iter_dataloader)
+        assert dataloader_iter is not None
+        next(dataloader_iter)
         return {"no_validation_metric": 0.0}
 
     def build_training_data_loader(self) -> Any:
