@@ -329,6 +329,9 @@ class DeepSpeedTrialController:
             self.training_enumerator = enumerate(
                 dataloader_next(self.training_iterator), start=self.start_from_batch
             )
+            self.validation_iterator = (
+                iter(self.validation_loader) if self.training_loader is not None else None
+            )
 
             def cleanup_iterator() -> None:
                 # Explicitly trigger the training iterator's shutdown (which happens in __del__).
@@ -782,9 +785,12 @@ class DeepSpeedTrialController:
                 num_inputs += self.trial.get_batch_length(batch)
 
                 if util.has_param(self.trial.evaluate_batch, "batch_idx", 2):
-                    vld_metrics = self.trial.evaluate_batch(batch=batch, batch_idx=idx)
+                    vld_metrics = self.trial.evaluate_batch(
+                        dataloader_iter=self.validation_iterator,
+                        batch_idx=idx)
                 else:
-                    vld_metrics = self.trial.evaluate_batch(batch=batch)  # type: ignore
+                    vld_metrics = self.trial.evaluate_batch(
+                        dataloader_iter=self.validation_iterator)  # type: ignore
                 # Verify validation metric names are the same across batches.
                 if keys is None:
                     keys = vld_metrics.keys()
