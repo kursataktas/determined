@@ -50,7 +50,11 @@ def create_trial_and_trial_controller(
 
     checkpoint_dir = checkpoint_dir or "/tmp"
 
-    distributed_context = None
+    distributed_backend = det._DistributedBackend()
+    if distributed_backend.use_deepspeed():
+        distributed_context = det.core.DistributedContext.from_deepspeed()
+    else:
+        distributed_context = None
 
     core_context = det.core._dummy_init(
         distributed=distributed_context,
