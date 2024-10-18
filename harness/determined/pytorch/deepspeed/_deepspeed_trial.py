@@ -513,7 +513,7 @@ class DeepSpeedTrialController:
                 self._on_epoch_start(epoch_idx)
 
             batch_metrics = self._train_batch(batch=batch, batch_idx=batch_idx, epoch_idx=epoch_idx)
-            training_metrics.append(batch_metrics)
+            training_metrics.extend(batch_metrics)
             self._step_batch()
 
             # Batch complete: check if any training periods have been reached and exit if any
@@ -542,7 +542,7 @@ class DeepSpeedTrialController:
 
     def _train_batch(
         self, batch: pytorch.TorchData, epoch_idx: int, batch_idx: int
-    ) -> Dict[str, Any]:
+    ) -> List[dict, Any]:
         num_micro_batches = self.context.num_micro_batches_per_slot
         if self.context.use_pipeline_parallel or self.context._manual_grad_accumulation:
             num_micro_batches = 1
