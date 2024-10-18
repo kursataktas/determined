@@ -542,7 +542,7 @@ class DeepSpeedTrialController:
 
     def _train_batch(
         self, batch: pytorch.TorchData, epoch_idx: int, batch_idx: int
-    ) -> List[dict, Any]:
+    ) -> List[dict]:
         num_micro_batches = self.context.num_micro_batches_per_slot
         if self.context.use_pipeline_parallel or self.context._manual_grad_accumulation:
             num_micro_batches = 1
