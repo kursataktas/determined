@@ -1,5 +1,6 @@
 import json
 import logging
+import pathlib
 import time
 from importlib import util as importutil
 from typing import Any, Dict, List, Optional, Set, Type, Union, cast
@@ -42,7 +43,7 @@ def overwrite_deepspeed_config(
     return util.merge_dicts(cast(Dict[str, Any], base_ds_config), source_ds_dict)
 
 
-class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
+class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
     """Contains runtime information for any Determined workflow that uses the ``DeepSpeedTrial``
     API.
 
@@ -65,14 +66,51 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
     5. Disable automatic gradient aggregation for non-pipeline-parallel training.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        det.TrialContext.__init__(self, *args, **kwargs)
+    def __init__(self,
+                 core_context: det.core.Context,
+                 trial_seed: Optional[int],
+                 hparams: Optional[Dict],
+                 slots_per_trial: int,
+                 num_gpus: int,
+                 exp_conf: Optional[Dict[str, Any]],
+                 aggregation_frequency: int,
+                 steps_completed: int,
+                 debug_enabled: bool,
+                 enable_tensorboard_logging: bool = True
+                 ) -> None:
+
+        self._core = core_context
+        self.distributed = self._core.distributed
+
         pytorch._PyTorchReducerContext.__init__(self, self.distributed.allgather)
+
+        self._per_slot_batch_size, self._global_batch_size = (
+            util.calculate_batch_sizes(
+                hparams=hparams,
+                slots_per_trial=slots_per_trial,
+                trialname="PyTorchTrial",
+            )
+            if hparams and hparams.get("global_batch_size", None)
+            else (None, None)
+        )
+        self._hparams = hparams
+        self._num_gpus = num_gpus
+        self._debug_enabled = debug_enabled
+        self._exp_conf = exp_conf
+
+        self._trial_seed = trial_seed
+        self._steps_completed = steps_completed
 
         self._init_device()
 
         # Track which types we have issued warnings for in to_device().
         self._to_device_warned_types = set()  # type: Set[Type]
+
+        self._aggregation_frequency = aggregation_frequency
+
+        self._fp16_compression_default = False
+        self._average_aggregated_gradients_default = True
+        self._is_pre_trainer = False
 
         # DeepSpeed supports mixed precision through Nvidia Apex AMP.  ZeRO optimizer requires
         # Apex AMP and cannot be used with more complex AMP modes.
@@ -85,13 +123,12 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
         # The following attributes are initialized during the lifetime of
         # a DeepSpeedTrialContext.
         self.models = []  # type: List[deepspeed.DeepSpeedEngine]
+        self.profiler = None  # type: Any
         self._epoch_len = None  # type: Optional[int]
 
         self._loss_ids = {}  # type: Dict[torch.Tensor, int]
         self._last_backward_batch_idx = None  # type: Optional[int]
         self._current_batch_idx = None  # type: Optional[int]
-
-        self.profiler = None  # type: Any
 
         self._mpu = det_ds.make_data_parallel_mpu(
             self.distributed
@@ -104,9 +141,10 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
         self._manual_grad_accumulation = False
 
         self._check_experiment_config_optimizations()
+        self._stop_requested = False
 
         self._tbd_writer = None  # type: Optional[Any]
-        self._enable_tensorboard_logging = True
+        self._enable_tensorboard_logging = enable_tensorboard_logging
         # Timestamp for batching TensorBoard uploads
         self._last_tb_reset_ts: Optional[float] = None
 
@@ -115,7 +153,11 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
         Check if the user specified options in optimizations are incompatible with
         DeepSpeedTrial.
         """
-        optimizations_config = self.env.experiment_config.get_optimizations_config()
+        if self._exp_conf is None:
+            optimizations_config = {}
+        else:
+            optimizations_config = self._exp_conf.get("optimizations", {})
+
         self._average_training_metrics = optimizations_config.get("average_training_metrics", False)
 
         mixed_precision_val = optimizations_config.get("mixed_precision", "O0")
@@ -262,8 +304,7 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
         return self._num_micro_batches_per_slot
 
     def _init_device(self) -> None:
-        self.n_gpus = len(self.env.container_gpus)
-        if not self.n_gpus:
+        if not self._num_gpus:
             raise det.errors.InvalidExperimentException("GPUs required for DeepSpeedTrial.")
         if self.distributed.size > 1:
             self.device = torch.device("cuda", self.distributed.get_local_rank())
@@ -271,6 +312,15 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
         else:
             self.device = torch.device("cuda", 0)
         assert self.device is not None, "Error setting torch device."
+
+    def _set_default_gradient_compression(self, gradient_compression: bool) -> None:
+        self._fp16_compression_default = gradient_compression
+
+    def _set_default_average_aggregated_gradients(self, average_aggregated_gradients: bool) -> None:
+        self._average_aggregated_gradients_default = average_aggregated_gradients
+
+    def _set_is_pre_trainer(self) -> None:
+        self._is_pre_trainer = True
 
     def to_device(self, data: pytorch._Data) -> pytorch.TorchData:
         """Map data to the device allocated by the Determined cluster.
@@ -359,6 +409,12 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
             **kwargs,
         )
 
+    def get_tensorboard_path(self) -> pathlib.Path:
+        """
+        Get the path where files for consumption by TensorBoard should be written
+        """
+        return self._core.train.get_tensorboard_path()
+
     def get_tensorboard_writer(self) -> Any:
         """
         This function returns an instance of ``torch.utils.tensorboard.SummaryWriter``
@@ -442,3 +498,86 @@ class DeepSpeedTrialContext(det.TrialContext, pytorch._PyTorchReducerContext):
         Return whether automatic tensorboard logging is enabled
         """
         return self._enable_tensorboard_logging
+
+    def get_global_batch_size(self) -> int:
+        """
+        Return the global batch size.
+        """
+        if self._global_batch_size is None:
+            raise ValueError(
+                "global_batch_size is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+        return self._global_batch_size
+
+    def get_per_slot_batch_size(self) -> int:
+        """
+        Return the per-slot batch size. When a model is trained with a single GPU, this is equal to
+        the global batch size. When multi-GPU training is used, this is equal to the global batch
+        size divided by the number of GPUs used to train the model.
+        """
+        if self._per_slot_batch_size is None:
+            raise ValueError(
+                "per_slot_batch_size is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+
+        return self._per_slot_batch_size
+
+    def get_experiment_config(self) -> Dict[str, Any]:
+        if self._exp_conf is None:
+            raise ValueError(
+                "exp_conf is undefined in this Trial. Please check the init() call to Trainer API."
+            )
+        return self._exp_conf
+
+    def get_hparam(self, name: str) -> Any:
+        """
+        Return the current value of the hyperparameter with the given name.
+        """
+        if self._hparams is None:
+            raise ValueError(
+                "hparams is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+        if name not in self.get_hparams():
+            raise ValueError(
+                "Could not find name '{}' in experiment "
+                "hyperparameters. Please check your experiment "
+                "configuration 'hyperparameters' section.".format(name)
+            )
+        if name == "global_batch_size":
+            logger.warning(
+                "Please use `context.get_per_slot_batch_size()` and "
+                "`context.get_global_batch_size()` instead of accessing "
+                "`global_batch_size` directly."
+            )
+        return self.get_hparams()[name]
+
+    def get_hparams(self) -> Dict[str, Any]:
+        if self._hparams is None:
+            raise ValueError(
+                "hparams is undefined in this Trial because hparams was not "
+                "configured. Please check the init() call to Trainer API."
+            )
+        return self._hparams
+
+    def get_stop_requested(self) -> bool:
+        """
+        Return whether a trial stoppage has been requested.
+        """
+        return self._stop_requested
+
+    def set_stop_requested(self, stop_requested: bool) -> None:
+        """
+        Set a flag to request a trial stoppage. When this flag is set to True,
+        we finish the step, checkpoint, then exit.
+        """
+        if not isinstance(stop_requested, bool):
+            raise AssertionError("stop_requested must be a boolean")
+
+        logger.info(
+            "A trial stoppage has requested. The trial will be stopped "
+            "at the end of the current step."
+        )
+        self._stop_requested = stop_requested

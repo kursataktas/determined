@@ -10,11 +10,11 @@ from torch.distributed import launcher
 
 import determined as det
 from determined import gpu, pytorch
+from determined.pytorch import deepspeed as det_ds
 from tests.experiment import utils
 
-
 def create_trial_and_trial_controller(
-    trial_class: pytorch.PyTorchTrial,
+    trial_class: det_ds.DeepSpeedTrial,
     hparams: typing.Dict,
     slots_per_trial: int = 1,
     scheduling_unit: int = 1,
@@ -31,10 +31,10 @@ def create_trial_and_trial_controller(
     aggregation_frequency: int = 1,
     test_mode: bool = False,
     trial_args: typing.Optional[typing.Dict] = None,
-) -> typing.Tuple[pytorch.PyTorchTrial, pytorch._PyTorchTrialController]:
+) -> typing.Tuple[det_ds.DeepSpeedTrial, det_ds.DeepSpeedTrialController]:
     assert issubclass(
-        trial_class, pytorch.PyTorchTrial
-    ), "pytorch test method called for non-pytorch trial"
+        trial_class, det_ds.DeepSpeedTrial
+    ), "deepspeed test method called for non-deepspeed trial"
 
     if not exp_config:
         assert hasattr(
@@ -51,8 +51,8 @@ def create_trial_and_trial_controller(
     checkpoint_dir = checkpoint_dir or "/tmp"
 
     distributed_backend = det._DistributedBackend()
-    if distributed_backend.use_torch():
-        distributed_context = det.core.DistributedContext.from_torch_distributed()
+    if distributed_backend.use_deepspeed():
+        distributed_context = det.core.DistributedContext.from_deepspeed()
     else:
         distributed_context = None
 
@@ -74,8 +74,8 @@ def create_trial_and_trial_controller(
     else:
         gpu_uuids = []
 
-    pytorch._PyTorchTrialController.pre_execute_hook(trial_seed, distributed_backend)
-    trial_context = pytorch.PyTorchTrialContext(
+    det_ds.DeepSpeedTrialController.pre_execute_hook(trial_seed, distributed_backend)
+    trial_context = det_ds.DeepSpeedTrialContext(
         core_context=core_context,
         trial_seed=trial_seed,
         hparams=hparams,
@@ -84,7 +84,6 @@ def create_trial_and_trial_controller(
         exp_conf=exp_config,
         aggregation_frequency=aggregation_frequency,
         steps_completed=steps_completed,
-        managed_training=True,  # this must be True to put model on GPU
         debug_enabled=False,
     )
     trial_context._set_default_gradient_compression(False)
@@ -119,10 +118,9 @@ def create_trial_and_trial_controller(
     trial_controller.training_iterator = iter(trial_controller.training_loader)
     return trial_inst, trial_controller
 
-
 def train_for_checkpoint(
     hparams: typing.Dict,
-    trial_class: pytorch.PyTorchTrial,
+    trial_class: det_ds.DeepSpeedTrial,
     tmp_path: pathlib.Path,
     exp_config: typing.Dict,
     slots_per_trial: int = 1,
@@ -155,7 +153,7 @@ def train_for_checkpoint(
 
 def train_from_checkpoint(
     hparams: typing.Dict,
-    trial_class: pytorch.PyTorchTrial,
+    trial_class: det_ds.DeepSpeedTrial,
     tmp_path: pathlib.Path,
     exp_config: typing.Dict,
     slots_per_trial: int = 1,
@@ -218,24 +216,3 @@ def train_and_checkpoint(
         batches_trained=steps_completed,
         trial_args=trial_args,
     )
-
-
-def setup_torch_distributed(local_procs=2, max_retries=0) -> launcher.LaunchConfig:
-    # set up distributed backend.
-    os.environ[det._DistributedBackend.TORCH] = str(1)
-
-    rdzv_backend = "c10d"
-    rdzv_endpoint = "localhost:29400"
-    rdzv_id = str(uuid.uuid4())
-
-    launch_config = launcher.LaunchConfig(
-        min_nodes=1,
-        max_nodes=1,
-        nproc_per_node=local_procs,
-        run_id=rdzv_id,
-        max_restarts=max_retries,
-        rdzv_endpoint=rdzv_endpoint,
-        rdzv_backend=rdzv_backend,
-    )
-
-    return launch_config
