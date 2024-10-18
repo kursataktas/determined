@@ -485,6 +485,20 @@ class DeepSpeedTrialController:
                     self._upload_tb_files()
                 self._stop_requested()
 
+        # Finished training for op. Perform final checkpoint/validation if necessary.
+        if not self._validation_is_current():
+            self._validate(op)
+        if not self._checkpoint_is_current():
+            self._checkpoint(already_exiting=False)
+
+        # Test mode will break after one batch despite not completing op.
+        if self.is_chief and not self.test_mode:
+            # The only case where op isn't reported as completed is if we restarted but
+            # op.length was already trained for and validated on; in that case just raise
+            # ShouldExit; we have nothing to do.
+            if not op._completed:
+                raise pytorch.ShouldExit(skip_exit_checkpoint=True)
+
     def _train_with_boundaries(
         self, training_enumerator: Iterator, train_boundaries: List[pytorch.TrainBoundary]
     ) -> Tuple[List[pytorch.TrainBoundary], List]:
@@ -905,10 +919,6 @@ class DeepSpeedTrialController:
                 searcher_length = pytorch.TrainUnit._from_searcher_unit(
                     searcher_op.length, self.searcher_unit, self.global_batch_size
                 )
-            print("self.max_length", self.max_length)
-            print("searcher_op.length", searcher_op.length)
-            print("self.global_batch_size", self.global_batch_size)
-            print("self.state.batches_trained", self.state.batches_trained)
             if self.searcher_metric_name:
                 searcher_metric = self._check_searcher_metric(metrics)
 
