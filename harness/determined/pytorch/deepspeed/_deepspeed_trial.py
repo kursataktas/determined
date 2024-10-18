@@ -720,7 +720,7 @@ class DeepSpeedTrialController:
                 "framework": f"torch-{torch.__version__}",
                 "format": "pickle",
             }
-            with self.context._core.checkpoint.store_path(metadata) as (
+            with self.context._core.checkpoint.store_path(metadata, shard=True) as (
                 path,
                 storage_id,
             ):
