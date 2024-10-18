@@ -911,10 +911,11 @@ class DeepSpeedTrialController:
             best_validation_before = self.core_context.train.get_experiment_best_validation()
 
             self.core_context.train.report_validation_metrics(self.state.batches_trained, metrics)
-
+        print("REPORTED VALIDATION METRICS")
         searcher_metric = None
 
         # Report searcher status.
+        print("REPORTING SEARCHER STATUS")
         if self.is_chief and searcher_op:
             if self.local_training:
                 searcher_length = self.max_length
@@ -922,13 +923,17 @@ class DeepSpeedTrialController:
                 searcher_length = pytorch.TrainUnit._from_searcher_unit(
                     searcher_op.length, self.searcher_unit, self.global_batch_size
                 )
+            print("searcher_op.length: ", searcher_op.length)
+            print("self.searcher_unit: ", self.searcher_unit)
+            print("self.global_batch_size", self.global_batch_size)
+            print("self.state.batches_trained", self.state.batches_trained)
             if self.searcher_metric_name:
                 searcher_metric = self._check_searcher_metric(metrics)
 
             assert searcher_length
             if self._steps_until_complete(searcher_length) < 1 and not searcher_op._completed:
                 searcher_op.report_completed(searcher_metric)
-
+        print("FINISHED WITH REPORTING SEARCHER STATUS")
         should_checkpoint = False
 
         # Checkpoint according to policy.
