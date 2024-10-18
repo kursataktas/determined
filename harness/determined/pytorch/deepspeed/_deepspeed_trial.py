@@ -484,7 +484,6 @@ class DeepSpeedTrialController:
                 if self.context.get_enable_tensorboard_logging():
                     self._upload_tb_files()
                 self._stop_requested()
-                op.report_completed()
 
     def _train_with_boundaries(
         self, training_enumerator: Iterator, train_boundaries: List[pytorch.TrainBoundary]
@@ -906,6 +905,10 @@ class DeepSpeedTrialController:
                 searcher_length = pytorch.TrainUnit._from_searcher_unit(
                     searcher_op.length, self.searcher_unit, self.global_batch_size
                 )
+            print("self.max_length", self.max_length)
+            print("searcher_op.length", searcher_op.length)
+            print("self.global_batch_size", self.global_batch_size)
+            print("self.state.batches_trained", self.state.batches_trained)
             if self.searcher_metric_name:
                 searcher_metric = self._check_searcher_metric(metrics)
 
