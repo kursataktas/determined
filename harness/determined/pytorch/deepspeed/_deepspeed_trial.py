@@ -415,6 +415,7 @@ class DeepSpeedTrialController:
                 )
         except pytorch.ShouldExit as e:
             # Checkpoint unsaved work and exit.
+            print("Caught SHOULDEXIT, CHECKPOINTING")
             if not e.skip_exit_checkpoint and not self._checkpoint_is_current():
                 self._checkpoint(already_exiting=True)
 
@@ -488,9 +489,11 @@ class DeepSpeedTrialController:
         # Finished training for op. Perform final checkpoint/validation if necessary.
         if not self._validation_is_current():
             self._validate(op)
+            print('FINISHED VALIDATION')
         if not self._checkpoint_is_current():
+            print("DOING CHECKPOINT")
             self._checkpoint(already_exiting=False)
-
+        print("FINISHED CHECKPOINT")
         # Test mode will break after one batch despite not completing op.
         if self.is_chief and not self.test_mode:
             # The only case where op isn't reported as completed is if we restarted but
