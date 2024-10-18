@@ -156,7 +156,7 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         if self._exp_conf is None:
             optimizations_config = {}
         else:
-            optimizations_config = self._exp_conf.get_optimizations_config()
+            optimizations_config = self._exp_conf.get("optimizations", {})
 
         self._average_training_metrics = optimizations_config.get("average_training_metrics", False)
 
