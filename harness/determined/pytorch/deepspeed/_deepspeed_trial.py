@@ -598,12 +598,12 @@ class DeepSpeedTrialController:
 
         # Aggregate and reduce training metrics from all the training processes.
         if self.context.distributed.size > 1 and self.context._average_training_metrics:
-            per_batch_metrics = pytorch._combine_and_average_training_metrics(
+             metrics = pytorch._combine_and_average_training_metrics(
                 self.context.distributed, per_batch_metrics
             )
         # num_inputs *= self.context._mpu.data_parallel_world_size
         # metrics = det.util.make_metrics(num_inputs, per_batch_metrics)
-        metrics = det.util.make_metrics(None, per_batch_metrics)
+        # metrics = det.util.make_metrics(None, per_batch_metrics)
 
         return metrics
 
