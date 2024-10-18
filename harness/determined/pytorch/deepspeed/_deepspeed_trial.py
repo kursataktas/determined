@@ -601,6 +601,9 @@ class DeepSpeedTrialController:
              metrics = pytorch._combine_and_average_training_metrics(
                 self.context.distributed, per_batch_metrics
             )
+        else:
+            metrics = per_batch_metrics
+
         # num_inputs *= self.context._mpu.data_parallel_world_size
         # metrics = det.util.make_metrics(num_inputs, per_batch_metrics)
         # metrics = det.util.make_metrics(None, per_batch_metrics)
