@@ -1168,7 +1168,7 @@ class DeepSpeedTrialController:
         torch.cuda.synchronize(self.context.device)
 
 
-class DeepSpeedTrial:
+class DeepSpeedTrial(det.LegacyTrial):
     """
     DeepSpeed trials are created by subclassing this abstract class.
 
