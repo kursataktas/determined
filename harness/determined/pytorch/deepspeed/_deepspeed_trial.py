@@ -938,6 +938,7 @@ class DeepSpeedTrialController:
 
         # Checkpoint according to policy.
         if self.is_chief:
+            print("CHECKPOINTING?")
             if not self._checkpoint_is_current():
                 if self.ckpt_policy == "all":
                     should_checkpoint = True
@@ -949,8 +950,9 @@ class DeepSpeedTrialController:
 
                     if self._is_best_validation(now=searcher_metric, before=best_validation_before):
                         should_checkpoint = True
-
+        print("Entering broadcast")
         should_checkpoint = self.context.distributed.broadcast(should_checkpoint)
+        print("should_checkpoint ", should_checkpoint)
         if should_checkpoint:
             self._checkpoint(already_exiting=False)
         return metrics
