@@ -947,6 +947,25 @@ class DeepSpeedTrialController:
             self._checkpoint(already_exiting=False)
         return metrics
 
+    def _check_searcher_metric(self, val_metrics: Dict) -> Any:
+        if self.searcher_metric_name not in val_metrics:
+            raise RuntimeError(
+                f"Search method is configured to use metric '{self.searcher_metric_name}' but "
+                f"model definition returned validation metrics {list(val_metrics.keys())}. The "
+                f"metric used by the search method must be one of the validation "
+                "metrics returned by the model definition."
+            )
+
+        # Check that the searcher metric has a scalar value so that it can be compared for
+        # search purposes. Other metrics don't have to be scalars.
+        searcher_metric = val_metrics[self.searcher_metric_name]
+        if not util.is_numerical_scalar(searcher_metric):
+            raise RuntimeError(
+                f"Searcher validation metric '{self.searcher_metric_name}' returned "
+                f"a non-scalar value: {searcher_metric}."
+            )
+        return searcher_metric
+
     def _evaluate_batch_defined(self) -> bool:
         return util.is_overridden(self.trial.evaluate_batch, DeepSpeedTrial)
 
