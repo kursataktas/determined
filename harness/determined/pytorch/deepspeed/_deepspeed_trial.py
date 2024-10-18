@@ -484,6 +484,7 @@ class DeepSpeedTrialController:
                 if self.context.get_enable_tensorboard_logging():
                     self._upload_tb_files()
                 self._stop_requested()
+                op.report_completed()
 
     def _train_with_boundaries(
         self, training_enumerator: Iterator, train_boundaries: List[pytorch.TrainBoundary]
