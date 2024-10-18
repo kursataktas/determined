@@ -38,9 +38,9 @@ def main(train_entrypoint: str) -> int:
 
     # We can't import pytorch directly because if running TfKerasTrials with an image that contains
     # both torch and keras, keras will throw exceptions due to unexpected CUDNN library versions.
-    if hasattr(det, "deepspeed") and issubclass(trial_class, det.pytorch.deepspeed.DeepSpeedTrial):
-        return _run_pytorch_trial(trial_class, info)
-    elif hasattr(det, "pytorch") and issubclass(trial_class, det.pytorch.PyTorchTrial):
+    if hasattr(det, "pytorch") and issubclass(trial_class, det.pytorch.PyTorchTrial):
+        if hasattr(det.pytorch, "deepspeed") and issubclass(trial_class, det.pytorch.deepspeed.DeepSpeedTrial):
+            return _run_pytorch_trial(trial_class, info)
         return _run_pytorch_trial(trial_class, info)
 
     # TODO: Don't include EnvContext object in the future high-level APIs for PyTorch or Keras.
