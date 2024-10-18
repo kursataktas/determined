@@ -714,20 +714,19 @@ class DeepSpeedTrialController:
         print("self.state.last_ckpt ", self.state.last_ckpt)
         try:
             uuid = ""
-            if self.is_chief:
-                metadata = {
-                    "determined_version": det.__version__,
-                    "steps_completed": self.state.batches_trained,
-                    "framework": f"torch-{torch.__version__}",
-                    "format": "pickle",
-                }
-                with self.context._core.checkpoint.store_path(metadata) as (
-                    path,
-                    storage_id,
-                ):
-                    print("path ", path)
-                    self._save(path)
-                    uuid = storage_id
+            metadata = {
+                "determined_version": det.__version__,
+                "steps_completed": self.state.batches_trained,
+                "framework": f"torch-{torch.__version__}",
+                "format": "pickle",
+            }
+            with self.context._core.checkpoint.store_path(metadata) as (
+                path,
+                storage_id,
+            ):
+                print("path ", path)
+                self._save(path)
+                uuid = storage_id
             uuid = self.context.distributed.broadcast(uuid)
             for callback in self.callbacks.values():
                 callback.on_checkpoint_upload_end(uuid=uuid)
@@ -1135,7 +1134,8 @@ class DeepSpeedTrialController:
         for callback in self.callbacks.values():
             callback.on_checkpoint_save_start(checkpoint)
         print("torch saving")
-        torch.save(checkpoint, str(path.joinpath("state_dict.pth")))
+        ckpt_name = f"det_state_dict_rank{self.context.distributed.rank}.pth"
+        torch.save(checkpoint, str(path.joinpath(ckpt_name)))
 
         assert self.state
         with path.joinpath("trial_state.pkl").open("wb") as f:
