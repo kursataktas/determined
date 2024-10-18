@@ -705,12 +705,13 @@ class DeepSpeedTrialController:
             callback.on_training_epoch_end(epoch_idx)
 
     def _checkpoint(self, already_exiting: bool) -> None:
+        print("WHAT IS GOING ON")
         if self.is_chief:
             self.core_context.train.set_status("checkpointing")
 
         assert self.state
         self.state.last_ckpt = self.state.batches_trained
-
+        print("self.state.last_ckpt ", self.state.last_ckpt)
         try:
             uuid = ""
             if self.is_chief:
@@ -724,6 +725,7 @@ class DeepSpeedTrialController:
                     path,
                     storage_id,
                 ):
+                    print("path ", path)
                     self._save(path)
                     uuid = storage_id
             uuid = self.context.distributed.broadcast(uuid)
@@ -1132,7 +1134,7 @@ class DeepSpeedTrialController:
 
         for callback in self.callbacks.values():
             callback.on_checkpoint_save_start(checkpoint)
-
+        print("torch saving")
         torch.save(checkpoint, str(path.joinpath("state_dict.pth")))
 
         assert self.state
@@ -1141,11 +1143,14 @@ class DeepSpeedTrialController:
 
         # We allow users to override save behavior if needed, but we default to using
         # the save method provided by DeepSpeed.
+        print("trial saving")
         self.trial.save(self.context, path)
 
         trial_cls = type(self.trial)
+        print('opening')
         with open(path.joinpath("load_data.json"), "w") as f2:
             try:
+                print('trying')
                 exp_conf = self.context.get_experiment_config()  # type: Optional[Dict[str, Any]]
                 hparams = self.context.get_hparams()  # type: Optional[Dict[str, Any]]
             except ValueError:
@@ -1162,13 +1167,14 @@ class DeepSpeedTrialController:
 
             if self.context._is_pre_trainer:
                 load_data.pop("is_trainer")
-
+            print("dumping")
             json.dump(load_data, f2)
 
         for callback in self.callbacks.values():
             # TODO(DET-7912): remove on_checkpoint_end once it has been deprecated long enough.
             callback.on_checkpoint_end(str(path))
             callback.on_checkpoint_write_end(str(path))
+        print('we should be done')
 
 
     def _load_state(self, state: Any) -> None:
