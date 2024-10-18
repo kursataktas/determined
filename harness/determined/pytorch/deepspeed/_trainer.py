@@ -210,7 +210,7 @@ def _initialize_distributed_backend() -> Optional[core.DistributedContext]:
     distributed_backend = det._DistributedBackend()
     if torch.cuda.is_available():
         deepspeed.init_distributed()
-        return core.DistributedContext.from_torch_distributed()
+        return core.DistributedContext.from_deepspeed()
     elif info and (len(info.container_addrs) > 1 or len(info.slot_ids) > 1):
         raise ValueError(
             "In multi-slot managed cluster training, you must wrap your training script with a "
