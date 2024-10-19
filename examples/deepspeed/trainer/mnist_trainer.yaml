@@ -30,6 +30,7 @@ entrypoint:
   - python3
   - -m
   - determined.launch.deepspeed
-  - --trial
-  - model_def:DCGANTrial
+  - python3
+  - trainer.py
+debug: true
 max_restarts: 0
