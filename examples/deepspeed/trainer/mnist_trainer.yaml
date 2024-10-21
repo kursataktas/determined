@@ -32,5 +32,4 @@ entrypoint:
   - determined.launch.deepspeed
   - python3
   - trainer.py
-debug: true
 max_restarts: 0

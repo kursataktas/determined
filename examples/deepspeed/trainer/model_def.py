@@ -22,10 +22,11 @@ FAKE_LABEL = 0
 
 
 class DCGANTrial(DeepSpeedTrial):
-    def __init__(self, context: DeepSpeedTrialContext, experiment_config: Dict) -> None:
+    def __init__(self, context: DeepSpeedTrialContext,
+                 hparams: AttrDict, data_config: AttrDict) -> None:
         self.context = context
-        self.hparams = AttrDict(experiment_config["hyperparameters"])
-        self.data_config = AttrDict(experiment_config["data"])
+        self.hparams = hparams
+        self.data_config = data_config
         self.logger = self.context.get_tensorboard_writer()
         num_channels = data.CHANNELS_BY_DATASET[self.data_config.dataset]
         gen_net = Generator(
