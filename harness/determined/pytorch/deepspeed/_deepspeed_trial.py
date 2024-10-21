@@ -177,6 +177,10 @@ class DeepSpeedTrialController:
         nreplicas = self.context._mpu.data_parallel_world_size
         rank = self.context._mpu.data_parallel_rank
 
+        print("nreplicas: ", nreplicas)
+        print("rank: ", rank)
+        print("self.context._mpu.should_build_data_loader: ", self.context._mpu.should_build_data_loader)
+
         # The data loader is only required on ranks that take the data as input or require
         # the data to compute the loss.  There could be intermediate model parallel ranks
         # that do not need a data loader at all.
