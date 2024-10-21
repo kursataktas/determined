@@ -180,8 +180,11 @@ class DeepSpeedTrialController:
         # The data loader is only required on ranks that take the data as input or require
         # the data to compute the loss.  There could be intermediate model parallel ranks
         # that do not need a data loader at all.
+        print("should we build a data loader?")
         if self.context._mpu.should_build_data_loader:
+            print("absolutely")
             train_data = self.trial.build_training_data_loader()
+            print("we built one")
             if isinstance(train_data, pytorch.DataLoader):
                 # Repeating the data loader is the default behavior for DeepSpeed data loaders when
                 # using pipeline parallel.
@@ -226,6 +229,7 @@ class DeepSpeedTrialController:
                         )
             else:
                 # Non-determined DataLoader; ensure the user meant to do this.
+                print("we didn't build a data loader")
                 if not self.context._data_repro_checks_disabled:
                     raise RuntimeError(
                         pytorch._dataset_repro_warning(
