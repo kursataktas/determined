@@ -409,6 +409,27 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
             **kwargs,
         )
 
+    def get_initial_batch(self) -> int:
+        return self._steps_completed
+
+    def get_data_config(self) -> Dict[str, Any]:
+        """
+        Return the data configuration.
+        """
+        return self.get_experiment_config().get("data", {})
+
+    def get_experiment_id(self) -> int:
+        """
+        Return the experiment ID of the current trial.
+        """
+        return int(self._core.train._exp_id)
+
+    def get_trial_id(self) -> int:
+        """
+        Return the trial ID of the current trial.
+        """
+        return int(self._core.train._trial_id)
+
     def get_trial_seed(self) -> int:
         if self._trial_seed is None:
             raise det.errors.InternalException("Trial seed not set.")

@@ -1006,6 +1006,7 @@ class DeepSpeedTrialController:
         for ckpt_path in potential_paths:
             maybe_ckpt = load_path.joinpath(*ckpt_path)
             if maybe_ckpt.exists():
+                print("TORCH LOAD BEHAVIOR")
                 checkpoint = torch.load(str(maybe_ckpt), map_location="cpu")
                 break
 
@@ -1023,6 +1024,7 @@ class DeepSpeedTrialController:
 
         # We allow users to override load behavior if needed, but we default to using
         # the load method provided by DeepSpeed.
+        print("DEEPSPEED LOADER")
         self.trial.load(self.context, load_path)
 
         if "rng_state" in checkpoint:
@@ -1061,6 +1063,7 @@ class DeepSpeedTrialController:
 
         save_path = load_path.joinpath("trial_state.pkl")
         if save_path.exists():
+            print("LOAD TRIAL STATE")
             with save_path.open("rb") as f:
                 self._load_state(pickle.load(f))
 
