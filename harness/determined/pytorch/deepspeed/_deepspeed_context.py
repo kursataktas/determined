@@ -140,7 +140,6 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         self._data_repro_checks_disabled = False
         self._manual_grad_accumulation = False
 
-        self._check_experiment_config_optimizations()
         self._stop_requested = False
 
         self._tbd_writer = None  # type: Optional[Any]
