@@ -168,12 +168,6 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
                 "Only one MPU can be passed to DeepSpeedTrialContext. "
                 "Please make sure wrap_mpu is only called once in the trial definition."
             )
-        if self.distributed.rank == 0:
-            if not self._mpu.should_report_metrics and not self._average_training_metrics:
-                raise det.errors.InvalidExperimentException(
-                    "Please set optimizations.average_training_metrics in the experiment config "
-                    "to true so that metrics will exist on the chief for report to the master."
-                )
         self._called_set_mpu = True
         self._mpu = mpu
 
