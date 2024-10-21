@@ -528,7 +528,7 @@ class DeepSpeedTrialController:
         epoch_len = self.context._epoch_len
         assert epoch_len, "Training dataloader uninitialized."
 
-        for batch_idx, batch in training_enumerator:
+        for batch_idx in range(epoch_len):
             epoch_idx, batch_in_epoch_idx = divmod(batch_idx, epoch_len)
 
             # Set the batch index on the trial context used by step_optimizer.
@@ -538,7 +538,7 @@ class DeepSpeedTrialController:
             if batch_in_epoch_idx == 0:
                 self._on_epoch_start(epoch_idx)
 
-            batch_metrics = self._train_batch(batch=batch, batch_idx=batch_idx, epoch_idx=epoch_idx)
+            batch_metrics = self._train_batch(batch_idx=batch_idx, epoch_idx=epoch_idx)
             training_metrics.extend(batch_metrics)
             self._step_batch()
 
@@ -567,7 +567,7 @@ class DeepSpeedTrialController:
         return train_boundaries, training_metrics
 
     def _train_batch(
-        self, batch: pytorch.TorchData, epoch_idx: int, batch_idx: int
+        self, epoch_idx: int, batch_idx: int
     ) -> List[dict]:
         num_micro_batches = self.context.num_micro_batches_per_slot
         if self.context.use_pipeline_parallel or self.context._manual_grad_accumulation:
