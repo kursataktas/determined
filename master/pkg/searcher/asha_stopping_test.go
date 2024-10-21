@@ -383,7 +383,7 @@ func TestStopTrials(t *testing.T) {
 		searcher.AsyncHalvingConfig.RawDivisor = &c.divisor
 		numRungs := len(c.rungs)
 		searcher.AsyncHalvingConfig.RawNumRungs = &numRungs
-		ops := searcher.stopRun(c.metric.runID, c.metric.timeStep, c.metric.metric)
+		ops := searcher.doEarlyStopping(c.metric.runID, c.metric.timeStep, c.metric.metric)
 		require.Equal(t, c.expectedOps, ops)
 		require.Equal(t, c.expectedRungs, searcher.Rungs)
 		require.Equal(t, c.expectedRunRungs, searcher.TrialRungs)

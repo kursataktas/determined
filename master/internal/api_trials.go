@@ -1438,7 +1438,7 @@ func (a *apiServer) ReportTrialProgress(
 
 func (a *apiServer) ReportTrialMetrics(
 	ctx context.Context, req *apiv1.ReportTrialMetricsRequest,
-) (resp *apiv1.ReportTrialMetricsResponse, err error) {
+) (*apiv1.ReportTrialMetricsResponse, error) {
 	metricGroup := model.MetricGroup(req.Group)
 	if err := metricGroup.Validate(); err != nil {
 		return nil, err
@@ -1457,17 +1457,14 @@ func (a *apiServer) ReportTrialMetrics(
 			eID, err := a.m.db.ExperimentIDByTrialID(int(req.Metrics.TrialId))
 			if err != nil {
 				log.WithError(err).Errorf("Failed to get experiment ID from trial ID (%d)", req.Metrics.TrialId)
-				return
 			}
 			e, ok := experiment.ExperimentRegistry.Load(eID)
 			if !ok {
 				log.Errorf("Failed to get experiment (%d) from experiment registry", eID)
-				return
 			}
 			err = e.TrialReportValidation(req.Metrics.TrialId, req.Metrics.Metrics.AvgMetrics.AsMap())
 			if err != nil {
 				log.WithError(err).Errorf("Failed to report validation metrics for trial (%d)", req.Metrics.TrialId)
-				return
 			}
 		}()
 	}

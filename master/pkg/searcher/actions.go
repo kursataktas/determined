@@ -2,13 +2,12 @@ package searcher
 
 import (
 	"fmt"
-
 	"github.com/determined-ai/determined/master/pkg/nprand"
 )
 
 // Action is an action that a searcher would like to perform.
 type Action interface {
-	String() string
+	SearcherAction()
 }
 
 // Create is a directive from the searcher to create a new run.
@@ -20,10 +19,8 @@ type Create struct {
 	SubSearchID int `json:"sub_search_id"`
 }
 
-// Stop is a directive from the searcher to stop a run.
-type Stop struct {
-	TrialID int32 `json:"trial_id"`
-}
+// SearcherAction (Create) implements SearcherAction.
+func (Create) SearcherAction() {}
 
 func (action Create) String() string {
 	return fmt.Sprintf(
@@ -42,6 +39,14 @@ func NewCreate(
 	}
 }
 
+// Stop is a directive from the searcher to stop a run.
+type Stop struct {
+	TrialID int32 `json:"trial_id"`
+}
+
+// SearcherAction (Stop) implements SearcherAction.
+func (Stop) SearcherAction() {}
+
 // NewStop initializes a new Stop action with the given Run ID.
 func NewStop(runID int32) Stop {
 	return Stop{TrialID: runID}
@@ -56,6 +61,9 @@ type Shutdown struct {
 	Cancel  bool
 	Failure bool
 }
+
+// SearcherAction (Shutdown) implements SearcherAction.
+func (Shutdown) SearcherAction() {}
 
 func (shutdown Shutdown) String() string {
 	return fmt.Sprintf("{Shutdown Cancel: %v Failure: %v}", shutdown.Cancel, shutdown.Failure)

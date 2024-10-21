@@ -162,7 +162,7 @@ func (s *asyncHalvingStoppingSearch) validationCompleted(
 		return nil, err
 	}
 
-	ops := s.stopRun(trialID, *timeStep, *value)
+	ops := s.doEarlyStopping(trialID, *timeStep, *value)
 	allTrials := len(s.TrialRungs) - s.InvalidTrials
 	if len(ops) > 0 && allTrials < s.MaxTrials() {
 		create := NewCreate(ctx.rand, sampleAll(ctx.hparams, ctx.rand))
@@ -191,11 +191,11 @@ func (s *asyncHalvingStoppingSearch) getMetric(metrics map[string]interface{}) (
 	return ptrs.Ptr(uint64(stepNum)), &searcherMetric, nil
 }
 
-// stopRun handles early-stopping and record-keeping logic for a validation metric reported to the
+// doEarlyStopping handles early-stopping and record-keeping logic for a validation metric reported to the
 // searcher.
 // If the metric qualifies the run for a rung but is not in the top 1/divisor trials for that rung,
-// stopRun will return a single `searcher.Stop` action. Otherwise, no actions will be returned.
-func (s *asyncHalvingStoppingSearch) stopRun(
+// doEarlyStopping will return a single `searcher.Stop` action. Otherwise, no actions will be returned.
+func (s *asyncHalvingStoppingSearch) doEarlyStopping(
 	trialID int32, timeStep uint64, metric float64,
 ) []Action {
 	rungIndex := s.TrialRungs[trialID]

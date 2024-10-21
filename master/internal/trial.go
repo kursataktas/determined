@@ -243,11 +243,8 @@ func (t *trial) PatchSearcherState(req experiment.TrialSearcherState) error {
 			InformationalReason: "hp search is finished",
 		})
 	default:
-		if !t.searcher.Stopped && !t.searcher.Closed {
-			return t.maybeAllocateTask()
-		}
+		return t.maybeAllocateTask()
 	}
-	return nil
 }
 
 func (t *trial) PatchRP(rp string) {

@@ -69,6 +69,7 @@ func (m *Master) restoreExperiment(expModel *model.Experiment) error {
 			"cannot restore experiment %d with legacy searcher", expModel.ID,
 		)
 	}
+
 	workspaceModel, err := workspace.WorkspaceByProjectID(context.TODO(), expModel.ProjectID)
 	if err != nil && errors.Cause(err) != sql.ErrNoRows {
 		return err
