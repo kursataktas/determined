@@ -1441,6 +1441,7 @@ class DeepSpeedTrial(det.LegacyTrial):
         This method can be overwritten for more custom load behavior.
         """
         for i, m in enumerate(context.models):
+            print(f"loading model{i}")
             try:
                 m.load_checkpoint(load_path, tag=f"model{i}")
             except AssertionError:
