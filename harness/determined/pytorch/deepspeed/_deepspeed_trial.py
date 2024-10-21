@@ -308,7 +308,7 @@ class DeepSpeedTrialController:
 
         with contextlib.ExitStack() as exit_stack:
             for callback in self.callbacks.values():
-                callback.on_trial_startup(self.steps_completed, self.latest_checkpoint)
+                callback.on_trial_startup(self.start_from_batch, self.latest_checkpoint)
                 exit_stack.enter_context(
                     defer(on_shutdown, callback.__class__.__name__, callback.on_trial_shutdown)
                 )
@@ -982,12 +982,6 @@ class DeepSpeedTrialController:
 
     def _evaluate_full_dataset_defined(self) -> bool:
         return util.is_overridden(self.trial.evaluate_full_dataset, DeepSpeedTrial)
-
-    def on_validation_step_end(self, metrics: Dict[str, Any]) -> None:
-        if self.context.get_enable_tensorboard_logging():
-            det.pytorch._log_tb_metrics(
-                self.context.get_tensorboard_writer(), "val", self.steps_completed, metrics
-            )
 
     def _load(self, load_path: pathlib.Path) -> None:
         # Right now we will load all checkpoint shards on each node regardless of which
