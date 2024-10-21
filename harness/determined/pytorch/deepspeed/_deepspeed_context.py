@@ -148,45 +148,6 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         # Timestamp for batching TensorBoard uploads
         self._last_tb_reset_ts: Optional[float] = None
 
-    def _check_experiment_config_optimizations(self) -> None:
-        """
-        Check if the user specified options in optimizations are incompatible with
-        DeepSpeedTrial.
-        """
-        if self._exp_conf is None:
-            optimizations_config = {}
-        else:
-            optimizations_config = self._exp_conf.get("optimizations", {})
-
-        self._average_training_metrics = optimizations_config.get("average_training_metrics", False)
-
-        mixed_precision_val = optimizations_config.get("mixed_precision", "O0")
-        if mixed_precision_val != "O0":
-            raise det.errors.InvalidExperimentException(
-                "Mixed precision is specified through the deepspeed config instead of the "
-                "Determined experiment config.",
-            )
-        aggregation_frequency = optimizations_config.get("aggregation_frequency", 1)
-        if aggregation_frequency > 1:
-            raise det.errors.InvalidExperimentException(
-                "Gradient aggregation is specified through the deepspeed config instead of the "
-                "Determined experiment config.",
-            )
-        other_optimizations_default_values = {
-            "average_aggregated_gradients": True,
-            "gradient_compression": False,
-            "tensor_fusion_threshold": 64,
-            "tensor_fusion_cycle_time": 5,
-            "autotune_tensor_fusion": False,
-        }
-        for opt_field, default_value in other_optimizations_default_values.items():
-            opt_value = optimizations_config.get(opt_field, default_value)
-            if opt_value != default_value:
-                logger.warning(
-                    f"{opt_field}={opt_value} ignored since the setting does not apply "
-                    "to DeepSpeedTrial."
-                )
-
     def set_mpu(self, mpu: det_ds.ModelParallelUnit) -> None:
         """Use a custom model parallel configuration.
 
