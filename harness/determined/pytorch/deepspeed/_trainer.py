@@ -266,7 +266,6 @@ def init(
     if local_training:
         trial_seed = None
         steps_completed = 0
-        managed_training = True
         debug_enabled = False
         num_gpus = len(gpu.get_gpu_uuids())
     else:
@@ -275,7 +274,6 @@ def init(
         trial_seed = cluster_info.trial.trial_seed
         exp_conf = cluster_info.trial._config
         steps_completed = cluster_info.trial._steps_completed
-        managed_training = True
         num_gpus = len(cluster_info.gpu_uuids)
         debug_enabled = cluster_info.trial._debug
 
