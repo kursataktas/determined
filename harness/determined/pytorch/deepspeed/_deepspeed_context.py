@@ -409,6 +409,11 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
             **kwargs,
         )
 
+    def get_trial_seed(self) -> int:
+        if self._trial_seed is None:
+            raise det.errors.InternalException("Trial seed not set.")
+        return self._trial_seed
+
     def get_tensorboard_path(self) -> pathlib.Path:
         """
         Get the path where files for consumption by TensorBoard should be written
