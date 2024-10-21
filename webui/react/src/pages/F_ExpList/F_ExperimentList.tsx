@@ -586,7 +586,7 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
     // changing both column order and pinned count should happen in one update:
     (newColumnsOrder: string[], pinnedCount?: number) => {
       const newColumnWidths = newColumnsOrder
-        .filter((c) => !(c in settings.columnWidths))
+        .filter((c) => !(c.split('/')[1] in settings.columnWidths))
         .reduce((acc: Record<string, number>, col) => {
           acc[col] = DEFAULT_COLUMN_WIDTH;
           return acc;
@@ -598,7 +598,10 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
         },
       });
       updateSettings({
-        columns: newColumnsOrder,
+        columns: newColumnsOrder.map<[string, string]>((typedColumn) => {
+          const [type, col] = typedColumn.split('/');
+          return [type, col];
+        }),
         pinnedColumnsCount: isUndefined(pinnedCount) ? settings.pinnedColumnsCount : pinnedCount,
       });
     },
@@ -642,7 +645,10 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
   }, [settings.compare, updateSettings]);
 
   const pinnedColumns = useMemo(() => {
-    return [...STATIC_COLUMNS, ...settings.columns.slice(0, settings.pinnedColumnsCount)];
+    return [
+      ...STATIC_COLUMNS.map<[string, string]>((c) => ['', c]),
+      ...settings.columns.slice(0, settings.pinnedColumnsCount),
+    ];
   }, [settings.columns, settings.pinnedColumnsCount]);
 
   const scrollbarWidth = useScrollbarWidth();
@@ -652,7 +658,7 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
     return Math.min(
       containerWidth - 30,
       pinnedColumns.reduce(
-        (totalWidth, curCol) =>
+        (totalWidth, [, curCol]) =>
           totalWidth + (settings.columnWidths[curCol] ?? DEFAULT_COLUMN_WIDTH),
         scrollbarWidth,
       ),
@@ -669,11 +675,11 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
       };
       pinnedColumns
         .filter(
-          (col) =>
+          ([, col]) =>
             !STATIC_COLUMNS.includes(col) &&
             (widthDifference > 0 || newColumnWidths[col] > MIN_COLUMN_WIDTH),
         )
-        .forEach((col, _, arr) => {
+        .forEach(([, col], _, arr) => {
           newColumnWidths[col] = Math.max(
             MIN_COLUMN_WIDTH,
             newColumnWidths[col] + widthDifference / arr.length,
@@ -713,14 +719,18 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
       0,
       settings.compare ? settings.pinnedColumnsCount : undefined,
     );
-    return Loadable.getOrElse([], projectColumns).some(
-      (column) =>
-        visibleColumns.includes(column.column) &&
+    return Loadable.getOrElse([], projectColumns).some((column) => {
+      const found = visibleColumns.find(
+        ([type, col]) => type === column.type && col === column.column,
+      );
+      return (
+        found &&
         (column.column === 'searcherMetricsVal' ||
           (column.type === V1ColumnType.NUMBER &&
             (column.location === V1LocationType.VALIDATIONS ||
-              column.location === V1LocationType.TRAINING))),
-    );
+              column.location === V1LocationType.TRAINING)))
+      );
+    });
   }, [settings.columns, projectColumns, settings.pinnedColumnsCount, settings.compare]);
 
   const columnsIfLoaded = useMemo(
@@ -745,7 +755,10 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
     const projectColumnsMap: Loadable<Record<string, ProjectColumn>> = Loadable.map(
       projectColumns,
       (columns) => {
-        return columns.reduce((acc, col) => ({ ...acc, [col.column]: col }), {});
+        return columns.reduce(
+          (acc, col) => ({ ...acc, [col.type.concat(`/${col.column}`)]: col }),
+          {},
+        );
       },
     );
     const columnDefs = getColumnDefs({
@@ -756,10 +769,13 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
     });
     const gridColumns = (
       settings.compare
-        ? [...STATIC_COLUMNS, ...columnsIfLoaded.slice(0, settings.pinnedColumnsCount)]
-        : [...STATIC_COLUMNS, ...columnsIfLoaded]
+        ? [
+            ...STATIC_COLUMNS.map<[string, string]>((c) => ['', c]),
+            ...columnsIfLoaded.slice(0, settings.pinnedColumnsCount),
+          ]
+        : [...STATIC_COLUMNS.map<[string, string]>((c) => ['', c]), ...columnsIfLoaded]
     )
-      .map((columnName) => {
+      .map(([colType, columnName]) => {
         if (columnName === MULTISELECT) {
           return (columnDefs[columnName] = defaultSelectionColumn(selection.rows, false));
         }
@@ -769,7 +785,7 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
           return;
         }
 
-        const currentColumn = projectColumnsMap.data[columnName];
+        const currentColumn = projectColumnsMap.data[colType.concat(`_${columnName}`)];
         if (!currentColumn) {
           if (columnName in columnDefs) return columnDefs[columnName];
           return;
@@ -783,6 +799,9 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
           };
 
         let dataPath: string | undefined = undefined;
+        const columnDefKey = columnName.includes('metadata')
+          ? colType.concat(`/${columnName}`)
+          : currentColumn.column;
         switch (currentColumn.location) {
           case V1LocationType.EXPERIMENT:
             dataPath = `experiment.${currentColumn.column}`;
@@ -817,7 +836,7 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
               settings.heatmapOn &&
               !settings.heatmapSkipped.includes(currentColumn.column)
             ) {
-              columnDefs[currentColumn.column] = defaultNumberColumn(
+              columnDefs[columnDefKey] = defaultNumberColumn(
                 currentColumn.column,
                 currentColumn.displayName || currentColumn.column,
                 settings.columnWidths[currentColumn.column] ??
@@ -830,20 +849,19 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
                 },
               );
             } else {
-              columnDefs[currentColumn.column] = defaultNumberColumn(
+              columnDefs[columnDefKey] = defaultNumberColumn(
                 currentColumn.column,
                 currentColumn.displayName || currentColumn.column,
                 settings.columnWidths[currentColumn.column] ??
                   defaultColumnWidths[currentColumn.column as ExperimentColumn] ??
                   MIN_COLUMN_WIDTH,
                 dataPath,
-                undefined,
               );
             }
             break;
           }
           case V1ColumnType.DATE:
-            columnDefs[currentColumn.column] = defaultDateColumn(
+            columnDefs[columnDefKey] = defaultDateColumn(
               currentColumn.column,
               currentColumn.displayName || currentColumn.column,
               settings.columnWidths[currentColumn.column] ??
@@ -855,7 +873,7 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
           case V1ColumnType.TEXT:
           case V1ColumnType.UNSPECIFIED:
           default:
-            columnDefs[currentColumn.column] = defaultTextColumn(
+            columnDefs[columnDefKey] = defaultTextColumn(
               currentColumn.column,
               currentColumn.displayName || currentColumn.column,
               settings.columnWidths[currentColumn.column] ??
@@ -871,7 +889,7 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
             settings.heatmapOn &&
             !settings.heatmapSkipped.includes(currentColumn.column)
           ) {
-            columnDefs[currentColumn.column] = searcherMetricsValColumn(
+            columnDefs[columnDefKey] = searcherMetricsValColumn(
               settings.columnWidths[currentColumn.column] ??
                 defaultColumnWidths[currentColumn.column as ExperimentColumn] ??
                 MIN_COLUMN_WIDTH,
@@ -881,14 +899,14 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
               },
             );
           } else {
-            columnDefs[currentColumn.column] = searcherMetricsValColumn(
+            columnDefs[columnDefKey] = searcherMetricsValColumn(
               settings.columnWidths[currentColumn.column] ??
                 defaultColumnWidths[currentColumn.column as ExperimentColumn] ??
                 MIN_COLUMN_WIDTH,
             );
           }
         }
-        return columnDefs[currentColumn.column];
+        return columnDefs[columnDefKey];
       })
       .flatMap((col) => (col ? [col] : []));
     return gridColumns;
@@ -979,10 +997,15 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
               key: 'pin',
               label: 'Pin column',
               onClick: () => {
-                const newColumnsOrder = columnsIfLoaded.filter((c) => c !== column.column);
-                newColumnsOrder.splice(settings.pinnedColumnsCount, 0, column.column);
+                const newColumnsOrder = columnsIfLoaded.filter(
+                  ([t, c]) => c !== column.column && t !== column.type,
+                );
+                newColumnsOrder.splice(settings.pinnedColumnsCount, 0, [
+                  column.type,
+                  column.column,
+                ]);
                 handleColumnsOrderChange?.(
-                  newColumnsOrder,
+                  newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
                   Math.min(settings.pinnedColumnsCount + 1, columnsIfLoaded.length),
                 );
               },
@@ -993,10 +1016,15 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
               key: 'unpin',
               label: 'Unpin column',
               onClick: () => {
-                const newColumnsOrder = columnsIfLoaded.filter((c) => c !== column.column);
-                newColumnsOrder.splice(settings.pinnedColumnsCount - 1, 0, column.column);
+                const newColumnsOrder = columnsIfLoaded.filter(
+                  ([t, c]) => c !== column.column && t !== column.type,
+                );
+                newColumnsOrder.splice(settings.pinnedColumnsCount - 1, 0, [
+                  column.type,
+                  column.column,
+                ]);
                 handleColumnsOrderChange?.(
-                  newColumnsOrder,
+                  newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
                   Math.max(settings.pinnedColumnsCount - 1, 0),
                 );
               },
@@ -1006,7 +1034,9 @@ const F_ExperimentList: React.FC<Props> = ({ project }) => {
         key: 'hide',
         label: 'Hide column',
         onClick: () => {
-          const newColumnsOrder = columnsIfLoaded.filter((c) => c !== column.column);
+          const newColumnsOrder = columnsIfLoaded
+            .filter(([t, c]) => c !== column.column && t !== column.type)
+            .map(([type, col]) => type.concat(`/${col}`));
           if (isPinned) {
             handleColumnsOrderChange?.(
               newColumnsOrder,

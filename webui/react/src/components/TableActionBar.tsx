@@ -89,7 +89,7 @@ interface Props {
   formStore: FilterFormStore;
   heatmapBtnVisible?: boolean;
   heatmapOn?: boolean;
-  initialVisibleColumns: string[];
+  initialVisibleColumns: [string, string][];
   isOpenFilter: boolean;
   onActionComplete?: () => Promise<void>;
   onActionSuccess?: (action: BatchAction, successfulIds: number[]) => void;

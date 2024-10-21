@@ -321,12 +321,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
       projectColumns,
       (columns) => {
         return columns.reduce((acc, col) => {
-          const colType = col.type.replace('COLUMN_TYPE_', '');
-
-          if (col.column.includes('metadata'))
-            return { ...acc, [col.column.concat(`_${colType}`)]: col };
-
-          return { ...acc, [col.column]: col };
+          return { ...acc, [col.type.concat(`/${col.column}`)]: col };
         }, {});
       },
     );
@@ -338,10 +333,13 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
     });
     const gridColumns = (
       settings.compare
-        ? [...STATIC_COLUMNS, ...columnsIfLoaded.slice(0, settings.pinnedColumnsCount)]
-        : [...STATIC_COLUMNS, ...columnsIfLoaded]
+        ? [
+            ...STATIC_COLUMNS.map<[string, string]>((c) => ['', c]),
+            ...columnsIfLoaded.slice(0, settings.pinnedColumnsCount),
+          ]
+        : [...STATIC_COLUMNS.map<[string, string]>((c) => ['', c]), ...columnsIfLoaded]
     )
-      .map((columnName) => {
+      .map(([colType, columnName]) => {
         if (columnName === MULTISELECT) {
           return defaultSelectionColumn(selection.rows, false);
         }
@@ -351,7 +349,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
           return;
         }
 
-        const currentColumn = projectColumnsMap.data[columnName];
+        const currentColumn = projectColumnsMap.data[colType.concat(`/${columnName}`)];
         if (!currentColumn) {
           if (columnName in columnDefs) return columnDefs[columnName];
           return;
@@ -365,6 +363,9 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
           };
 
         let dataPath: string | undefined = undefined;
+        const columnDefKey = columnName.includes('metadata')
+          ? colType.concat(`/${columnName}`)
+          : currentColumn.column;
         switch (currentColumn.location) {
           case V1LocationType.EXPERIMENT:
             dataPath = `experiment.${currentColumn.column}`;
@@ -405,7 +406,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
               settings.heatmapOn &&
               !settings.heatmapSkipped.includes(currentColumn.column)
             ) {
-              columnDefs[currentColumn.column] = defaultNumberColumn(
+              columnDefs[columnDefKey] = defaultNumberColumn(
                 currentColumn.column,
                 currentColumn.displayName || currentColumn.column,
                 settings.columnWidths[currentColumn.column] ??
@@ -418,20 +419,19 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
                 },
               );
             } else {
-              columnDefs[currentColumn.column] = defaultNumberColumn(
+              columnDefs[columnDefKey] = defaultNumberColumn(
                 currentColumn.column,
                 currentColumn.displayName || currentColumn.column,
                 settings.columnWidths[currentColumn.column] ??
                   defaultColumnWidths[currentColumn.column as RunColumn] ??
                   MIN_COLUMN_WIDTH,
                 dataPath,
-                undefined,
               );
             }
             break;
           }
           case V1ColumnType.DATE:
-            columnDefs[currentColumn.column] = defaultDateColumn(
+            columnDefs[columnDefKey] = defaultDateColumn(
               currentColumn.column,
               currentColumn.displayName || currentColumn.column,
               settings.columnWidths[currentColumn.column] ??
@@ -441,7 +441,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
             );
             break;
           case V1ColumnType.ARRAY:
-            columnDefs[currentColumn.column] = defaultArrayColumn(
+            columnDefs[columnDefKey] = defaultArrayColumn(
               currentColumn.column,
               currentColumn.displayName || currentColumn.column,
               settings.columnWidths[currentColumn.column] ??
@@ -453,7 +453,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
           case V1ColumnType.TEXT:
           case V1ColumnType.UNSPECIFIED:
           default:
-            columnDefs[currentColumn.column] = defaultTextColumn(
+            columnDefs[columnDefKey] = defaultTextColumn(
               currentColumn.column,
               currentColumn.displayName || currentColumn.column,
               settings.columnWidths[currentColumn.column] ??
@@ -467,7 +467,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
             .getOrElse([])
             .find((h) => h.metricsName === currentColumn.column);
 
-          columnDefs[currentColumn.column] = searcherMetricsValColumn(
+          columnDefs[columnDefKey] = searcherMetricsValColumn(
             settings.columnWidths[currentColumn.column],
             heatmap && settings.heatmapOn && !settings.heatmapSkipped.includes(currentColumn.column)
               ? {
@@ -477,7 +477,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
               : undefined,
           );
         }
-        return columnDefs[currentColumn.column];
+        return columnDefs[columnDefKey];
       })
       .flatMap((col) => (col ? [col] : []));
     return gridColumns;
@@ -518,14 +518,19 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
       0,
       settings.compare ? settings.pinnedColumnsCount : undefined,
     );
-    return Loadable.getOrElse([], projectColumns).some(
-      (column) =>
-        visibleColumns.includes(column.column) &&
+    return Loadable.getOrElse([], projectColumns).some((column) => {
+      const found =
+        visibleColumns.find(([type, col]) => type === column.type && col === column.column) !==
+        undefined;
+
+      return (
+        found &&
         (column.column === 'searcherMetricsVal' ||
           (column.type === V1ColumnType.NUMBER &&
             (column.location === V1LocationType.VALIDATIONS ||
-              column.location === V1LocationType.TRAINING))),
-    );
+              column.location === V1LocationType.TRAINING)))
+      );
+    });
   }, [settings.columns, projectColumns, settings.pinnedColumnsCount, settings.compare]);
 
   const onPageChange = useCallback(
@@ -668,7 +673,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
     return Math.min(
       containerWidth - 30,
       pinnedColumns.reduce(
-        (totalWidth, curCol) =>
+        (totalWidth, [, curCol]) =>
           totalWidth + (settings.columnWidths[curCol] ?? DEFAULT_COLUMN_WIDTH),
         scrollbarWidth,
       ),
@@ -685,11 +690,11 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
       };
       pinnedColumns
         .filter(
-          (col) =>
+          ([, col]) =>
             !STATIC_COLUMNS.includes(col) &&
             (widthDifference > 0 || newColumnWidths[col] > MIN_COLUMN_WIDTH),
         )
-        .forEach((col, _, arr) => {
+        .forEach(([, col], _, arr) => {
           newColumnWidths[col] = Math.max(
             MIN_COLUMN_WIDTH,
             newColumnWidths[col] + widthDifference / arr.length,
@@ -838,7 +843,7 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
     // changing both column order and pinned count should happen in one update:
     (newColumnsOrder: string[], pinnedCount?: number) => {
       const newColumnWidths = newColumnsOrder
-        .filter((c) => !(c in settings.columnWidths))
+        .filter((c) => !(c.split('/')[1] in settings.columnWidths))
         .reduce((acc: Record<string, number>, col) => {
           acc[col] = DEFAULT_COLUMN_WIDTH;
           return acc;
@@ -850,7 +855,10 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
         },
       });
       updateSettings({
-        columns: newColumnsOrder,
+        columns: newColumnsOrder.map<[string, string]>((typedColumn) => {
+          const [type, col] = typedColumn.split('/');
+          return [type, col];
+        }),
         pinnedColumnsCount: pinnedCount ?? settings.pinnedColumnsCount,
       });
     },
@@ -877,7 +885,6 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
     (newCount: number) => updateSettings({ pinnedColumnsCount: newCount }),
     [updateSettings],
   );
-
   const getHeaderMenuItems = useCallback(
     (columnId: string, colIdx: number): MenuItem[] => {
       if (columnId === MULTISELECT) {
@@ -910,8 +917,11 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
         return items;
       }
 
-      const column = Loadable.getOrElse([], projectColumns).find((c) => c.column === columnId);
       const isPinned = colIdx <= settings.pinnedColumnsCount + STATIC_COLUMNS.length - 1;
+      const [colType] = columnsIfLoaded[colIdx];
+      const column = Loadable.getOrElse([], projectColumns).find(
+        (c) => c.column === columnId && c.type === colType,
+      );
       const items: MenuItem[] = [
         // Column is pinned if the index is inside of the frozen columns
         colIdx < STATIC_COLUMNS.length || isMobile
@@ -922,10 +932,12 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
                 key: 'pin',
                 label: 'Pin column',
                 onClick: () => {
-                  const newColumnsOrder = columnsIfLoaded.filter((c) => c !== columnId);
-                  newColumnsOrder.splice(settings.pinnedColumnsCount, 0, columnId);
+                  const newColumnsOrder = columnsIfLoaded.filter(
+                    ([t, c]) => c !== columnId && t !== colType,
+                  );
+                  newColumnsOrder.splice(settings.pinnedColumnsCount, 0, [colType, columnId]);
                   handleColumnsOrderChange(
-                    newColumnsOrder,
+                    newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
                     Math.min(settings.pinnedColumnsCount + 1, columnsIfLoaded.length),
                   );
                 },
@@ -936,10 +948,12 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
                 key: 'unpin',
                 label: 'Unpin column',
                 onClick: () => {
-                  const newColumnsOrder = columnsIfLoaded.filter((c) => c !== columnId);
-                  newColumnsOrder.splice(settings.pinnedColumnsCount - 1, 0, columnId);
+                  const newColumnsOrder = columnsIfLoaded.filter(
+                    ([t, c]) => c !== columnId && t !== colType,
+                  );
+                  newColumnsOrder.splice(settings.pinnedColumnsCount - 1, 0, [colType, columnId]);
                   handleColumnsOrderChange(
-                    newColumnsOrder,
+                    newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
                     Math.max(settings.pinnedColumnsCount - 1, 0),
                   );
                 },
@@ -949,14 +963,18 @@ const FlatRuns: React.FC<Props> = ({ projectId, workspaceId, searchId }) => {
           key: 'hide',
           label: 'Hide column',
           onClick: () => {
-            const newColumnsOrder = columnsIfLoaded.filter((c) => c !== columnId);
+            const newColumnsOrder = columnsIfLoaded.filter(
+              ([t, c]) => c !== columnId && t !== colType,
+            );
             if (isPinned) {
               handleColumnsOrderChange(
-                newColumnsOrder,
+                newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
                 Math.max(settings.pinnedColumnsCount - 1, 0),
               );
             } else {
-              handleColumnsOrderChange(newColumnsOrder);
+              handleColumnsOrderChange(
+                newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
+              );
             }
           },
         },

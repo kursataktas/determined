@@ -13,6 +13,7 @@ import { Theme } from 'hew/Theme';
 import { Loadable } from 'hew/utils/loadable';
 
 import { handlePath, paths } from 'routes/utils';
+import { V1ColumnType } from 'services/api-ts-sdk';
 import { CompoundRunState, DetailedUser, ExperimentWithTrial, JobState, RunState } from 'types';
 import { getDurationInEnglish, getTimeInEnglish } from 'utils/datetime';
 import { humanReadableNumber } from 'utils/number';
@@ -47,23 +48,23 @@ export const experimentColumns = [
 
 export type ExperimentColumn = (typeof experimentColumns)[number];
 
-export const defaultExperimentColumns: ExperimentColumn[] = [
-  'id',
-  'name',
-  'state',
-  'startTime',
-  'user',
-  'numTrials',
-  'searcherType',
-  'searcherMetric',
-  'searcherMetricsVal',
-  'description',
-  'tags',
-  'progress',
-  'duration',
-  'resourcePool',
-  'checkpointCount',
-  'checkpointSize',
+export const defaultExperimentColumns: [V1ColumnType, ExperimentColumn][] = [
+  [V1ColumnType.NUMBER, 'id'],
+  [V1ColumnType.TEXT, 'name'],
+  [V1ColumnType.TEXT, 'state'],
+  [V1ColumnType.DATE, 'startTime'],
+  [V1ColumnType.TEXT, 'user'],
+  [V1ColumnType.NUMBER, 'numTrials'],
+  [V1ColumnType.TEXT, 'searcherType'],
+  [V1ColumnType.TEXT, 'searcherMetric'],
+  [V1ColumnType.NUMBER, 'searcherMetricsVal'],
+  [V1ColumnType.TEXT, 'description'],
+  [V1ColumnType.TEXT, 'tags'],
+  [V1ColumnType.NUMBER, 'progress'],
+  [V1ColumnType.NUMBER, 'duration'],
+  [V1ColumnType.TEXT, 'resourcePool'],
+  [V1ColumnType.NUMBER, 'checkpointCount'],
+  [V1ColumnType.NUMBER, 'checkpointSize'],
 ];
 
 function getCellStateFromExperimentState(expState: CompoundRunState) {

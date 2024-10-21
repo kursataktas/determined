@@ -19,6 +19,7 @@ import { Theme } from 'hew/Theme';
 import { Loadable } from 'hew/utils/loadable';
 
 import { handlePath, paths } from 'routes/utils';
+import { V1ColumnType } from 'services/api-ts-sdk';
 import { DetailedUser, FlatRun, RunState } from 'types';
 import { DURATION_UNIT_MEASURES, durationInEnglish, getTimeInEnglish } from 'utils/datetime';
 import { humanReadableNumber } from 'utils/number';
@@ -61,10 +62,32 @@ const EXCLUDED_SEARCH_DEFAULT_COLUMNS: RunColumn[] = [
 
 export type RunColumn = (typeof runColumns)[number];
 
-export const defaultRunColumns: RunColumn[] = runColumns.filter((f) => f !== 'archived');
+export const defaultRunColumns: [V1ColumnType, RunColumn][] = [
+  [V1ColumnType.NUMBER, 'id'],
+  [V1ColumnType.TEXT, 'state'],
+  [V1ColumnType.DATE, 'startTime'],
+  [V1ColumnType.TEXT, 'user'],
+  [V1ColumnType.NUMBER, 'forkedFrom'],
+  [V1ColumnType.NUMBER, 'experimentProgress'],
+  [V1ColumnType.NUMBER, 'experimentId'],
+  [V1ColumnType.TEXT, 'experimentName'],
+  [V1ColumnType.TEXT, 'experimentDescription'],
+  [V1ColumnType.TEXT, 'externalExperimentId'],
+  [V1ColumnType.TEXT, 'externalRunId'],
+  [V1ColumnType.UNSPECIFIED, 'isExpMultitrial'],
+  [V1ColumnType.UNSPECIFIED, 'parentArchived'],
+  [V1ColumnType.TEXT, 'searcherType'],
+  [V1ColumnType.TEXT, 'searcherMetric'],
+  [V1ColumnType.NUMBER, 'searcherMetricsVal'],
+  [V1ColumnType.TEXT, 'tags'],
+  [V1ColumnType.NUMBER, 'duration'],
+  [V1ColumnType.TEXT, 'resourcePool'],
+  [V1ColumnType.NUMBER, 'checkpointCount'],
+  [V1ColumnType.NUMBER, 'checkpointSize'],
+];
 
-export const defaultSearchRunColumns: RunColumn[] = defaultRunColumns.filter(
-  (c) => !EXCLUDED_SEARCH_DEFAULT_COLUMNS?.includes(c),
+export const defaultSearchRunColumns: [V1ColumnType, RunColumn][] = defaultRunColumns.filter(
+  ([, c]) => !EXCLUDED_SEARCH_DEFAULT_COLUMNS?.includes(c),
 );
 
 function getCellStateFromExperimentState(expState: RunState) {

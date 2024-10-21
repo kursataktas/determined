@@ -12,7 +12,7 @@ export const DEFAULT_SELECTION: t.TypeOf<typeof RegularSelectionType> = {
 };
 
 export const FlatRunsSettings = t.partial({
-  columns: t.array(t.string),
+  columns: t.array(t.tuple([t.string, t.string])),
   columnWidths: t.record(t.string, t.number),
   compare: t.boolean,
   filterset: t.string, // save FilterFormSet as string

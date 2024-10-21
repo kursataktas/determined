@@ -8,7 +8,7 @@ import Message from 'hew/Message';
 import Pivot from 'hew/Pivot';
 import Spinner from 'hew/Spinner';
 import { Loadable } from 'hew/utils/loadable';
-import React, { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { ChangeEvent, useCallback, useMemo, useState } from 'react';
 import { FixedSizeList as List } from 'react-window';
 
 import { V1LocationType } from 'services/api-ts-sdk';
@@ -38,8 +38,8 @@ export const COLUMNS_MENU_BUTTON = 'columns-menu-button';
 
 interface ColumnMenuProps {
   isMobile?: boolean;
-  initialVisibleColumns: string[];
-  defaultVisibleColumns: string[];
+  initialVisibleColumns: [string, string][];
+  defaultVisibleColumns: [string, string][];
   defaultPinnedCount: number;
   onVisibleColumnChange?: (newColumns: string[], pinnedCount?: number) => void;
   onHeatmapSelectionRemove?: (id: string) => void;
@@ -51,7 +51,7 @@ interface ColumnMenuProps {
 }
 
 interface ColumnTabProps {
-  columnState: string[];
+  columnState: [string, string][];
   handleShowSuggested: () => void;
   onVisibleColumnChange?: (newColumns: string[], pinnedCount?: number) => void;
   projectId: number;
@@ -77,7 +77,7 @@ const ColumnPickerTab: React.FC<ColumnTabProps> = ({
   onHeatmapSelectionRemove,
 }) => {
   const checkedColumnNames = useMemo(
-    () => (compare ? new Set(columnState.slice(0, pinnedColumnsCount)) : new Set(columnState)),
+    () => (compare ? columnState.slice(0, pinnedColumnsCount) : columnState),
     [columnState, compare, pinnedColumnsCount],
   );
 
@@ -97,49 +97,48 @@ const ColumnPickerTab: React.FC<ColumnTabProps> = ({
 
   const allFilteredColumnsChecked = useMemo(() => {
     return filteredColumns.every((col) => {
-      const colType = col.type.replace('COLUMN_TYPE_', '');
+      const found = columnState.find(
+        ([type, column]) => type === col.type && column === col.column,
+      );
 
-      if (col.column.includes('metadata'))
-        return columnState.includes(col.column.concat(`_${colType}`));
-      return columnState.includes(col.column);
+      return found !== undefined;
     });
   }, [columnState, filteredColumns]);
-  const [metadataColumns, setMetadataColumns] = useState(() => new Map<string, number[]>()); // a map of metadata columns and found indexes
 
   const handleShowHideAll = useCallback(() => {
     const filteredColumnMap: Record<string, boolean> = filteredColumns.reduce((acc, col) => {
-      const colType = col.type.replace('COLUMN_TYPE_', '');
+      const found =
+        columnState.find(([type, column]) => type === col.type && column === col.column) !==
+        undefined;
 
-      if (col.column.includes('metadata'))
-        return {
-          ...acc,
-          [col.column.concat(`_${colType}`)]: columnState.includes(
-            col.column.concat(`_${colType}`),
-          ),
-        };
-
-      return { ...acc, [col.column]: columnState.includes(col.column) };
+      return {
+        ...acc,
+        [col.type.concat(`/${col.column}`)]: found,
+      };
     }, {});
 
     const newColumns = allFilteredColumnsChecked
-      ? columnState.filter((col) => !filteredColumnMap[col])
-      : [
-          ...new Set([
-            ...columnState,
-            ...filteredColumns.map((col) => {
-              const colType = col.type.replace('COLUMN_TYPE_', '');
-
-              if (col.column.includes('metadata')) return col.column.concat(`_${colType}`);
-              return col.column;
-            }),
-          ]),
-        ]; // TODO: check if that needs to be mapped with the metadata
+      ? columnState.filter(([type, col]) => !filteredColumnMap[type.concat(`/${col}`)])
+      : [...columnState, ...filteredColumns.map<[string, string]>((col) => [col.type, col.column])]; // TODO: check if that needs to be mapped with the metadata
     const pinnedCount = allFilteredColumnsChecked
       ? // If uncheck something pinned, reduce the pinnedColumnsCount
-        newColumns.filter((col) => columnState.indexOf(col) < pinnedColumnsCount).length
+        newColumns.filter(([type, col]) => {
+          let stateIndex: number = -1;
+          for (const [index, [stateColumnType, stateColumn]] of columnState.entries()) {
+            if (col === stateColumn && type === stateColumnType) {
+              stateIndex = index;
+              break;
+            }
+          }
+
+          return stateIndex < pinnedColumnsCount;
+        }).length
       : pinnedColumnsCount;
 
-    onVisibleColumnChange?.(newColumns, pinnedCount);
+    onVisibleColumnChange?.(
+      newColumns.map(([type, col]) => type.concat(`/${col}`)),
+      pinnedCount,
+    );
   }, [
     allFilteredColumnsChecked,
     columnState,
@@ -154,34 +153,46 @@ const ColumnPickerTab: React.FC<ColumnTabProps> = ({
 
       if (id === undefined) return;
 
-      const [col] = id.split('_');
-      const targetCol = col.includes('metadata') ? id : col;
+      const [type, targetCol] = id.split('/');
 
       if (compare) {
         // pin or unpin column
-        const newColumns = columnState.filter((c) => c !== targetCol);
+        const newColumns = columnState.filter(([t, c]) => c !== targetCol && t !== type);
         let pinnedCount = pinnedColumnsCount;
         if (checked) {
-          newColumns.splice(pinnedColumnsCount, 0, targetCol);
+          newColumns.splice(pinnedColumnsCount, 0, [type, targetCol]);
           pinnedCount = Math.max(pinnedColumnsCount + 1, 0);
         } else {
-          newColumns.splice(pinnedColumnsCount - 1, 0, targetCol);
+          newColumns.splice(pinnedColumnsCount - 1, 0, [type, targetCol]);
           pinnedCount = Math.max(pinnedColumnsCount - 1, 0);
         }
-        onVisibleColumnChange?.(newColumns, pinnedCount);
+        onVisibleColumnChange?.(
+          newColumns.map(([type, col]) => type.concat(`/${col}`)),
+          pinnedCount,
+        );
       } else {
         let pinnedCount = pinnedColumnsCount;
+        let stateIndex: number = -1;
+        for (const [index, [stateColumn, stateColumnType]] of columnState.entries()) {
+          if (targetCol === stateColumn && type === stateColumnType) {
+            stateIndex = index;
+            break;
+          }
+        }
         // If uncheck something pinned, reduce the pinnedColumnsCount
-        if (!checked && columnState.indexOf(targetCol) < pinnedColumnsCount) {
+        if (!checked && stateIndex < pinnedColumnsCount) {
           pinnedCount = Math.max(pinnedColumnsCount - 1, 0);
         }
         // If uncheck something had heatmap skipped, reset to heatmap visible
         if (!checked) {
           onHeatmapSelectionRemove?.(targetCol);
         }
-        const newColumnSet = new Set(columnState);
-        checked ? newColumnSet.add(targetCol) : newColumnSet.delete(targetCol);
-        onVisibleColumnChange?.([...newColumnSet], pinnedCount);
+        const newColumnSet = [...columnState];
+        checked ? newColumnSet.push([type, targetCol]) : newColumnSet.splice(stateIndex, 1);
+        onVisibleColumnChange?.(
+          [...newColumnSet.map(([type, col]) => type.concat(`/${col}`))],
+          pinnedCount,
+        );
       }
     },
     [compare, columnState, onVisibleColumnChange, onHeatmapSelectionRemove, pinnedColumnsCount],
@@ -197,62 +208,37 @@ const ColumnPickerTab: React.FC<ColumnTabProps> = ({
   const rows = useCallback(
     ({ index, style }: { index: number; style: React.CSSProperties }) => {
       const col = filteredColumns[index];
-      const colType = col.type.replace('COLUMN_TYPE_', '');
-      const getColDisplayName = (col: ProjectColumn) => {
-        const metCol = metadataColumns.get(col.column);
-
-        if (metCol !== undefined && metCol.length > 1) {
-          return (
-            <>
-              {col.column} <Badge text={colType} />
-            </>
-          );
-        }
-
-        return (
-          <>
-            {col.displayName || col.column} <Badge text={colType} />
-          </>
-        );
-      };
+      const getColDisplayName = () => (
+        <>
+          {col.displayName || col.column} <Badge text={col.type.replace('COLUMN_TYPE_', '')} />
+        </>
+      );
       const getChecked = () => {
-        if (col.column.includes('metadata'))
-          return checkedColumnNames.has(`${col.column}_${colType}`);
-        return checkedColumnNames.has(col.column);
+        const checked =
+          checkedColumnNames.find(
+            ([type, column]) => type === col.type && column === col.column,
+          ) !== undefined;
+        return checked;
       };
       return (
         <div
           className={css.rows}
           data-test="row"
-          data-test-id={`${col.column}_${colType}`}
-          key={`${col.column}_${colType}`}
+          data-test-id={`${col.type}/${col.column}`}
+          key={`${col.type}/${col.column}`}
           style={style}>
           <Checkbox
             checked={getChecked()}
             data-test="checkbox"
-            id={`${col.column}_${colType}`}
+            id={`${col.type}/${col.column}`}
             onChange={handleColumnChange}>
-            {getColDisplayName(col)}
+            {getColDisplayName()}
           </Checkbox>
         </div>
       );
     },
-    [filteredColumns, checkedColumnNames, metadataColumns, handleColumnChange],
+    [filteredColumns, checkedColumnNames, handleColumnChange],
   );
-
-  useEffect(() => {
-    for (const [index, { column }] of totalColumns.entries()) {
-      if (column.includes('metadata')) {
-        const columnEntry = metadataColumns.get(column) ?? [];
-        if (!columnEntry.includes(index)) {
-          setMetadataColumns((prev) => {
-            prev.set(column, [...columnEntry, index]);
-            return prev;
-          });
-        }
-      }
-    }
-  }, [totalColumns, metadataColumns]);
 
   return (
     <div data-test-component="columnPickerTab" data-testid="column-picker-tab">
@@ -321,7 +307,10 @@ const ColumnPickerMenu: React.FC<ColumnMenuProps> = ({
   );
 
   const handleShowSuggested = useCallback(() => {
-    onVisibleColumnChange?.(defaultVisibleColumns, defaultPinnedCount);
+    onVisibleColumnChange?.(
+      defaultVisibleColumns.map(([type, col]) => type.concat(`/${col}`)),
+      defaultPinnedCount,
+    );
     closeMenu();
   }, [onVisibleColumnChange, defaultVisibleColumns, defaultPinnedCount]);
 

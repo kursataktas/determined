@@ -548,7 +548,7 @@ const Searches: React.FC<Props> = ({ project }) => {
     // changing both column order and pinned count should happen in one update:
     (newColumnsOrder: string[], pinnedCount?: number) => {
       const newColumnWidths = newColumnsOrder
-        .filter((c) => !(c in settings.columnWidths))
+        .filter((c) => !(c.split('/')[1] in settings.columnWidths))
         .reduce((acc: Record<string, number>, col) => {
           acc[col] = DEFAULT_COLUMN_WIDTH;
           return acc;
@@ -560,7 +560,10 @@ const Searches: React.FC<Props> = ({ project }) => {
         },
       });
       updateSettings({
-        columns: newColumnsOrder,
+        columns: newColumnsOrder.map<[string, string]>((typedColumn) => {
+          const [type, col] = typedColumn.split('/');
+          return [type, col];
+        }),
         pinnedColumnsCount: isUndefined(pinnedCount) ? settings.pinnedColumnsCount : pinnedCount,
       });
     },
@@ -627,7 +630,10 @@ const Searches: React.FC<Props> = ({ project }) => {
     const projectColumnsMap: Loadable<Record<string, ProjectColumn>> = Loadable.map(
       projectColumns,
       (columns) => {
-        return columns.reduce((acc, col) => ({ ...acc, [col.column]: col }), {});
+        return columns.reduce(
+          (acc, col) => ({ ...acc, [col.type.concat(`/${col.column}`)]: col }),
+          {},
+        );
       },
     );
     const columnDefs = getColumnDefs({
@@ -636,8 +642,11 @@ const Searches: React.FC<Props> = ({ project }) => {
       themeIsDark: isDarkMode,
       users,
     });
-    const gridColumns = [...STATIC_COLUMNS, ...columnsIfLoaded]
-      .map((columnName) => {
+    const gridColumns = [
+      ...STATIC_COLUMNS.map<[string, string]>((c) => ['', c]),
+      ...columnsIfLoaded,
+    ]
+      .map(([columnType, columnName]) => {
         if (columnName === MULTISELECT) {
           return (columnDefs[columnName] = defaultSelectionColumn(selection.rows, false));
         }
@@ -647,7 +656,7 @@ const Searches: React.FC<Props> = ({ project }) => {
           return;
         }
 
-        const currentColumn = projectColumnsMap.data[columnName];
+        const currentColumn = projectColumnsMap.data[columnType.concat(`/${columnName}`)];
         if (!currentColumn) {
           if (columnName in columnDefs) return columnDefs[columnName];
           return;
@@ -789,10 +798,15 @@ const Searches: React.FC<Props> = ({ project }) => {
               key: 'pin',
               label: 'Pin column',
               onClick: () => {
-                const newColumnsOrder = columnsIfLoaded.filter((c) => c !== column.column);
-                newColumnsOrder.splice(settings.pinnedColumnsCount, 0, column.column);
+                const newColumnsOrder = columnsIfLoaded.filter(
+                  ([t, c]) => c !== column.column && t !== column.type,
+                );
+                newColumnsOrder.splice(settings.pinnedColumnsCount, 0, [
+                  column.type,
+                  column.column,
+                ]);
                 handleColumnsOrderChange?.(
-                  newColumnsOrder,
+                  newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
                   Math.min(settings.pinnedColumnsCount + 1, columnsIfLoaded.length),
                 );
               },
@@ -803,10 +817,15 @@ const Searches: React.FC<Props> = ({ project }) => {
               key: 'unpin',
               label: 'Unpin column',
               onClick: () => {
-                const newColumnsOrder = columnsIfLoaded.filter((c) => c !== column.column);
-                newColumnsOrder.splice(settings.pinnedColumnsCount - 1, 0, column.column);
+                const newColumnsOrder = columnsIfLoaded.filter(
+                  ([t, c]) => c !== column.column && t !== column.type,
+                );
+                newColumnsOrder.splice(settings.pinnedColumnsCount - 1, 0, [
+                  column.type,
+                  column.column,
+                ]);
                 handleColumnsOrderChange?.(
-                  newColumnsOrder,
+                  newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
                   Math.max(settings.pinnedColumnsCount - 1, 0),
                 );
               },
@@ -816,14 +835,18 @@ const Searches: React.FC<Props> = ({ project }) => {
         key: 'hide',
         label: 'Hide column',
         onClick: () => {
-          const newColumnsOrder = columnsIfLoaded.filter((c) => c !== column.column);
+          const newColumnsOrder = columnsIfLoaded.filter(
+            ([t, c]) => c !== column.column && t !== column.type,
+          );
           if (isPinned) {
             handleColumnsOrderChange?.(
-              newColumnsOrder,
+              newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
               Math.max(settings.pinnedColumnsCount - 1, 0),
             );
           } else {
-            handleColumnsOrderChange?.(newColumnsOrder);
+            handleColumnsOrderChange?.(
+              newColumnsOrder.map(([type, col]) => type.concat(`/${col}`)),
+            );
           }
         },
       },

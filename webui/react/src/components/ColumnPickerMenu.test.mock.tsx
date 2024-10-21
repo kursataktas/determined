@@ -1,3 +1,4 @@
+import { V1ColumnType } from 'services/api-ts-sdk';
 import { ProjectColumn } from 'types';
 
 export const projectColumns: ProjectColumn[] = [
@@ -1563,21 +1564,21 @@ export const projectColumns: ProjectColumn[] = [
   },
 ];
 
-export const initialVisibleColumns = [
-  'id',
-  'name',
-  'state',
-  'startTime',
-  'user',
-  'numTrials',
-  'searcherType',
-  'searcherMetric',
-  'searcherMetricsVal',
-  'description',
-  'tags',
-  'progress',
-  'duration',
-  'resourcePool',
-  'checkpointCount',
-  'checkpointSize',
+export const initialVisibleColumns: [V1ColumnType, string][] = [
+  [V1ColumnType.NUMBER, 'id'],
+  [V1ColumnType.TEXT, 'name'],
+  [V1ColumnType.TEXT, 'state'],
+  [V1ColumnType.DATE, 'startTime'],
+  [V1ColumnType.TEXT, 'user'],
+  [V1ColumnType.NUMBER, 'numTrials'],
+  [V1ColumnType.TEXT, 'searcherType'],
+  [V1ColumnType.TEXT, 'searcherMetric'],
+  [V1ColumnType.NUMBER, 'searcherMetricsVal'],
+  [V1ColumnType.TEXT, 'description'],
+  [V1ColumnType.TEXT, 'tags'],
+  [V1ColumnType.NUMBER, 'progress'],
+  [V1ColumnType.NUMBER, 'duration'],
+  [V1ColumnType.TEXT, 'resourcePool'],
+  [V1ColumnType.NUMBER, 'checkpointCount'],
+  [V1ColumnType.NUMBER, 'checkpointSize'],
 ];

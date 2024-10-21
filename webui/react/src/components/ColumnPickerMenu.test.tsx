@@ -19,7 +19,7 @@ const locations = [
 
 const PINNED_COLUMNS_COUNT = 0;
 
-const setup = (initCols?: string[]) => {
+const setup = (initCols?: [string, string][]) => {
   const user = userEvent.setup();
   const onVisibleColumnChange = vi.fn();
   render(
@@ -48,11 +48,11 @@ describe('ColumnPickerMenu', () => {
   it('should deselect columns', async () => {
     const { onVisibleColumnChange, user } = setup();
     await user.click(await screen.findByTestId(COLUMNS_MENU_BUTTON));
-    const columnId = initialVisibleColumns[0];
+    const columnId = initialVisibleColumns[0][1];
     const displayName = projectColumns.find((c) => c.column === columnId)?.displayName;
     await user.click(await screen.findByText(displayName ?? ''));
     expect(onVisibleColumnChange).toHaveBeenCalledWith(
-      initialVisibleColumns.filter((c) => c !== columnId),
+      initialVisibleColumns.filter(([, c]) => c !== columnId),
       PINNED_COLUMNS_COUNT,
     );
   });
@@ -61,7 +61,9 @@ describe('ColumnPickerMenu', () => {
     const { onVisibleColumnChange, user } = setup();
     await user.click(await screen.findByTestId(COLUMNS_MENU_BUTTON));
     const unselectedInitialColumns = projectColumns.filter(
-      (c) => !initialVisibleColumns.includes(c.column),
+      (c) =>
+        initialVisibleColumns.find(([type, col]) => col === c.column && type === c.type) ===
+        undefined,
     );
     const columnId = unselectedInitialColumns.map((c) => c.column)[0];
     const displayName = projectColumns.find((c) => c.column === columnId)?.displayName;
@@ -73,11 +75,11 @@ describe('ColumnPickerMenu', () => {
   it('should reset', async () => {
     const { onVisibleColumnChange, user } = setup();
     await user.click(await screen.findByTestId(COLUMNS_MENU_BUTTON));
-    const columnId = initialVisibleColumns[0];
+    const columnId = initialVisibleColumns[0][1];
     const displayName = projectColumns.find((c) => c.column === columnId)?.displayName;
     await user.click(await screen.findByText(displayName ?? ''));
     expect(onVisibleColumnChange).toHaveBeenCalledWith(
-      initialVisibleColumns.filter((c) => c !== columnId),
+      initialVisibleColumns.filter(([, c]) => c !== columnId),
       PINNED_COLUMNS_COUNT,
     );
     const resets = await screen.findAllByText('Reset');
@@ -111,7 +113,7 @@ describe('ColumnPickerMenu', () => {
     await user.click(showAlls[0]);
     const locationColumns = projectColumns
       .filter((c) => c.location === locations[0])
-      .map((c) => c.column);
+      .map<[string, string]>((c) => [c.type, c.column]);
     const addedColumns = _.difference(locationColumns, initialVisibleColumns);
     expect(onVisibleColumnChange).toHaveBeenCalledWith(
       [...initialVisibleColumns, ...addedColumns],
@@ -122,7 +124,7 @@ describe('ColumnPickerMenu', () => {
   it('should hide all', async () => {
     const locationColumns = projectColumns
       .filter((c) => c.location === locations[0])
-      .map((c) => c.column);
+      .map<[string, string]>((c) => [c.type, c.column]);
     const { onVisibleColumnChange, user } = setup(locationColumns);
     await user.click(await screen.findByTestId(COLUMNS_MENU_BUTTON));
     const hideAlls = await screen.findAllByText('Hide all');
@@ -133,8 +135,8 @@ describe('ColumnPickerMenu', () => {
   it('should filter', async () => {
     const { user } = setup();
     await user.click(await screen.findByTestId(COLUMNS_MENU_BUTTON));
-    const includedColumn = projectColumns.find((c) => c.column === initialVisibleColumns[0]);
-    const excludedColumn = projectColumns.find((c) => c.column === initialVisibleColumns[1]);
+    const includedColumn = projectColumns.find((c) => c.column === initialVisibleColumns[0][1]);
+    const excludedColumn = projectColumns.find((c) => c.column === initialVisibleColumns[1][1]);
     await user.type(await screen.findByRole('textbox'), includedColumn?.displayName ?? '');
     expect(screen.queryByText(includedColumn?.displayName ?? '')).toBeInTheDocument();
     expect(screen.queryByText(excludedColumn?.displayName ?? '')).not.toBeInTheDocument();
