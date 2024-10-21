@@ -528,7 +528,7 @@ class DeepSpeedTrialController:
         epoch_len = self.context._epoch_len
         assert epoch_len, "Training dataloader uninitialized."
 
-        for batch_idx in range(epoch_len):
+        for batch_idx  in range(epoch_len):
             epoch_idx, batch_in_epoch_idx = divmod(batch_idx, epoch_len)
 
             # Set the batch index on the trial context used by step_optimizer.
@@ -619,7 +619,7 @@ class DeepSpeedTrialController:
             ), "did not train for gradient accumulation steps"
 
         batch_dur = time.time() - batch_start_time
-        samples_per_second = self.trial.get_batch_length(batch) / batch_dur
+        samples_per_second = self.context._global_batch_size / batch_dur
         samples_per_second *= self.context.distributed.size
 
         # Aggregate and reduce training metrics from all the training processes.
@@ -629,10 +629,6 @@ class DeepSpeedTrialController:
             )
         else:
             metrics = per_batch_metrics
-
-        # num_inputs *= self.context._mpu.data_parallel_world_size
-        # metrics = det.util.make_metrics(num_inputs, per_batch_metrics)
-        # metrics = det.util.make_metrics(None, per_batch_metrics)
 
         return metrics
 
