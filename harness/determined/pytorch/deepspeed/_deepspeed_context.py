@@ -106,6 +106,11 @@ class DeepSpeedTrialContext(pytorch._PyTorchReducerContext):
         # Track which types we have issued warnings for in to_device().
         self._to_device_warned_types = set()  # type: Set[Type]
 
+        if aggregation_frequency > 1:
+            raise det.errors.InvalidExperimentException(
+                "Gradient aggregation is specified through the deepspeed config instead of the "
+                "Determined experiment config.",
+            )
         self._aggregation_frequency = aggregation_frequency
 
         self._fp16_compression_default = False
