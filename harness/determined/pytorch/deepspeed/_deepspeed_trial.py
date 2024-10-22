@@ -822,11 +822,10 @@ class DeepSpeedTrialController:
                 # and no pipeline parallel when building the data loaders.
                 if util.has_param(self.trial.evaluate_batch, "batch_idx", 2):
                     vld_metrics = self.trial.evaluate_batch(
-                        dataloader_iter=self.validation_iterator,
-                        batch_idx=idx)
+                        self.validation_iterator,
+                        idx)
                 else:
-                    vld_metrics = self.trial.evaluate_batch(
-                        dataloader_iter=self.validation_iterator)  # type: ignore
+                    vld_metrics = self.trial.evaluate_batch(self.validation_iterator)  # type: ignore
                 # Verify validation metric names are the same across batches.
                 if keys is None:
                     keys = vld_metrics.keys()
