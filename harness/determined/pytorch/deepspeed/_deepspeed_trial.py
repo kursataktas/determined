@@ -809,7 +809,6 @@ class DeepSpeedTrialController:
             keys = None
             batch_metrics = []
 
-            assert isinstance(self.validation_loader, torch.utils.data.DataLoader)
             for callback in self.callbacks.values():
                 callback.on_validation_epoch_start()
 
