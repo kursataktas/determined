@@ -1113,7 +1113,10 @@ class DeepSpeedTrialController:
     def _save(self, path: pathlib.Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
 
-        util.write_user_code(path, not self.local_training)
+        if self.is_chief:
+            # We assume these stateful objects should be the same across slots and only have
+            # the chief save them.
+            util.write_user_code(path, not self.local_training)
 
 
         rng_state = {
