@@ -803,6 +803,8 @@ class DeepSpeedTrialController:
         num_inputs = 0
         metrics = {}  # type: Dict[str, Any]
 
+        batches_evaluated = -1
+
         if self._evaluate_batch_defined():
             keys = None
             batch_metrics = []
@@ -811,10 +813,13 @@ class DeepSpeedTrialController:
             for callback in self.callbacks.values():
                 callback.on_validation_epoch_start()
 
-            idx = -1  # Later, we'll use this default to see if we've iterated at all.
-            for idx, batch in enumerate(iter(self.validation_loader)):
-                num_inputs += self.trial.get_batch_length(batch)
-
+            for idx in range(cast(int, self.num_validation_batches)):
+                batches_evaluated += 1
+                num_inputs += cast(int, self.validation_batch_size)
+                # Note that when using pipeline parallelism, each call to evaluate_batch will request
+                # self.context.num_micro_batches_per_slot batches from the validation iterator.
+                # This is why we set self.num_validation_batches differently for pipeline parallel
+                # and no pipeline parallel when building the data loaders.
                 if util.has_param(self.trial.evaluate_batch, "batch_idx", 2):
                     vld_metrics = self.trial.evaluate_batch(
                         dataloader_iter=self.validation_iterator,
@@ -843,9 +848,6 @@ class DeepSpeedTrialController:
                 if self.test_mode:
                     break
 
-            if idx == -1:
-                raise RuntimeError("validation_loader is empty.")
-
             for callback in self.callbacks.values():
                 callback.on_validation_epoch_end(batch_metrics)
 
@@ -859,7 +861,7 @@ class DeepSpeedTrialController:
             )
 
             # Gather a list of per-worker (num_inputs, num_batches) tuples.
-            input_counts = self.context.distributed.gather((num_inputs, idx + 1))
+            input_counts = self.context.distributed.gather((num_inputs, batches_evaluated + 1))
 
         else:
             assert self._evaluate_full_dataset_defined(), "evaluate_full_dataset not defined."
