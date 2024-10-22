@@ -619,7 +619,11 @@ class DeepSpeedTrialController:
             ), "did not train for gradient accumulation steps"
 
         batch_dur = time.time() - batch_start_time
-        samples_per_second = self.context._global_batch_size / batch_dur
+        batch_inputs = (
+                self.context.train_micro_batch_size_per_gpu
+                * self.context.num_micro_batches_per_slot
+        )
+        samples_per_second = batch_inputs / batch_dur
         samples_per_second *= self.context.distributed.size
 
         # Aggregate and reduce training metrics from all the training processes.
